@@ -6,7 +6,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -28,7 +27,6 @@ public class SecurityConfig {
             // The session lives in cookies, so state-changing requests need a CSRF token: the SPA
             // reads the XSRF-TOKEN cookie and echoes it in the X-XSRF-TOKEN header.
             .csrf(csrf -> csrf.spa())
-            .cors(Customizer.withDefaults())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             // Not signed in -> 401 (the app then tries a refresh); signed in but not allowed -> 403.
             .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))

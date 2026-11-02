@@ -1,10 +1,8 @@
 package com.bot.botback.controller;
 
 import com.bot.botback.config.AuthProperties;
-import com.bot.botback.config.CorsProperties;
 import com.bot.botback.config.PasswordEncoderConfig;
 import com.bot.botback.config.StreamingConfig;
-import com.bot.botback.config.WebConfig;
 import com.bot.botback.model.User;
 import com.bot.botback.repository.UserRepository;
 import com.bot.botback.security.AuthCookies;
@@ -45,7 +43,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -54,17 +51,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The web layer with the real security setup (cookie JWT filter, CSRF, CORS, validation, error
- * handling) and mocked services: who may call what, and how bad input is answered.
+ * The web layer with the real security setup (cookie JWT filter, CSRF, validation, error handling) and mocked services: who may call what, and how bad input is answered.
  */
 @WebMvcTest(controllers = {ChatController.class, ReminderController.class, AuthController.class})
-@Import({SecurityConfig.class, WebConfig.class, PasswordEncoderConfig.class, StreamingConfig.class,
+@Import({SecurityConfig.class, PasswordEncoderConfig.class, StreamingConfig.class,
         JwtUtil.class, CurrentUser.class, LoginRateLimiter.class, AuthCookies.class})
-@EnableConfigurationProperties({AuthProperties.class, CorsProperties.class})
+@EnableConfigurationProperties(AuthProperties.class)
 @TestPropertySource(properties = {
         "app.auth.jwt-secret=test-secret-0123456789-abcdefghijklmnop",
-        "app.auth.secure-cookies=true",
-        "app.cors.allowed-origins=http://localhost:5173"
+        "app.auth.secure-cookies=true"
 })
 class ApiSecurityTest {
 
@@ -201,18 +196,5 @@ class ApiSecurityTest {
     @Test
     void unknownPathsAre404NotServerErrors() throws Exception {
         mvc.perform(get("/api/does-not-exist").cookie(eleniSession)).andExpect(status().isNotFound());
-    }
-
-    @Test
-    void corsAllowsTheConfiguredFrontendOnly() throws Exception {
-        mvc.perform(options("/api/chat/stream")
-                        .header(HttpHeaders.ORIGIN, "http://localhost:5173")
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
-                .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"));
-        mvc.perform(options("/api/chat/stream")
-                        .header(HttpHeaders.ORIGIN, "https://evil.example.com")
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
-                .andExpect(status().isForbidden());
     }
 }
