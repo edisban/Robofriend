@@ -110,7 +110,8 @@ public class ListService {
             item.setListName(list);
             item.setText(text);
             existing.add(repository.save(item));
-            log.info("Added '{}' to {} list of user {}", text, list, userId);
+            log.info("Added an item to the {} list of user {}", list, userId);
+            log.debug("List item for user {}: {}", userId, text);
         }
     }
 

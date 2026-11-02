@@ -93,7 +93,7 @@ public class AiService {
                 if (splitter.meta().isBlank()) {
                     log.warn("Model reply had no {} section; no facts or reminder saved this turn", ReplySplitter.META_MARKER);
                 } else {
-                    log.info("Model metadata for user {}: {}", userId, splitter.meta().strip());
+                    log.debug("Model metadata for user {}: {}", userId, splitter.meta().strip());
                 }
                 extraction.persist(userId, extraction.parseMeta(splitter.meta()));
             }
@@ -162,7 +162,8 @@ public class AiService {
             entity.setStatus(ReminderStatus.PENDING);
             entity.setNotes("Auto-extracted locally (AI provider unavailable)");
             reminderRepository.save(entity);
-            log.info("Saved local reminder for user {}: {} at {}", userId, parsed.title(), parsed.scheduledAt());
+            log.info("Saved local reminder for user {} at {}", userId, parsed.scheduledAt());
+            log.debug("Local reminder title for user {}: {}", userId, parsed.title());
             return true;
         } catch (Exception e) {
             log.error("Failed to save locally extracted reminder: {}", e.getMessage());

@@ -84,7 +84,8 @@ public class CheckInService {
         message.setUserId(userId);
         message.setSender(Sender.BOT);
         message.setContent(text);
-        log.info("Daily check-in for user {}: {}", userId, text);
+        log.info("Daily check-in for user {}: sent a message", userId);
+        log.debug("Daily check-in text for user {}: {}", userId, text);
         return Optional.of(chatMessageRepository.save(message));
     }
 

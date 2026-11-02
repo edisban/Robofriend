@@ -125,8 +125,8 @@ public class ReplyExtraction {
                 continue;
             }
             memoryService.ingestFact(userId, fact.fact(), "General", fact.key());
-            log.info("Saved fact for user {}{}: {}", userId,
-                    fact.key() == null ? "" : " [" + fact.key() + "]", fact.fact());
+            log.info("Saved fact for user {}{}", userId, fact.key() == null ? "" : " [" + fact.key() + "]");
+            log.debug("Fact for user {}: {}", userId, fact.fact());
         }
     }
 
@@ -153,7 +153,8 @@ public class ReplyExtraction {
             entity.setStatus(ReminderStatus.PENDING);
             entity.setNotes("Auto-extracted from conversation");
             reminderRepository.save(entity);
-            log.info("Saved reminder for user {}: {} at {}", userId, reminder.title(), scheduledAt);
+            log.info("Saved reminder for user {} at {}", userId, scheduledAt);
+            log.debug("Reminder title for user {}: {}", userId, reminder.title());
         } catch (Exception e) {
             log.error("Failed to save reminder: {}", e.getMessage());
         }
