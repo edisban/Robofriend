@@ -13,3 +13,11 @@ jobs:
         working-directory: bot-back
         run: chmod +x mvnw && ./mvnw test
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: bot-front/package-lock.json
+      - name: Build frontend
+        working-directory: bot-front
+        run: npm ci && npm run lint && npm run build

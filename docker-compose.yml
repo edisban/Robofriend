@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: botuser
       POSTGRES_PASSWORD: botpass
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -55,7 +55,7 @@ services:
       SPRING_DATASOURCE_USERNAME: botuser
       SPRING_DATASOURCE_PASSWORD: botpass
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_API_MODEL: ${GROQ_API_MODEL:-openai/gpt-oss-20b}
+      GROQ_API_MODEL: ${GROQ_API_MODEL:-openai/gpt-oss-120b}
       MEMORY_SERVICE_URL: http://ai-memory-service:8000
       MEMORY_SERVICE_TOKEN: ${MEMORY_SERVICE_TOKEN:-local-dev-token}
     healthcheck:
