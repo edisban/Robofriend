@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu --no-cache-dir -r requirements.txt
 
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
 
 FROM python:3.11-slim AS runtime
 

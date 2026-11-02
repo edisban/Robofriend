@@ -16,13 +16,14 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="AI Memory Service", version="1.0.0")
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5433")
+DB_PORT = os.getenv("DB_PORT", "5434")
 DB_NAME = os.getenv("DB_NAME", "botdb")
 DB_USER = os.getenv("DB_USER", "botuser")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "botpass")
 SERVICE_TOKEN = os.getenv("MEMORY_SERVICE_TOKEN", "local-dev-token")
 
-MODEL_NAME = "all-MiniLM-L6-v2"
+# Multilingual so Greek (and mixed Greek/English) memories search well.
+MODEL_NAME = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 EMBEDDING_DIM = 384
 
 model = None
@@ -66,6 +67,35 @@ def encode(text: str) -> list:
     return model.encode(text).tolist()
 
 
+def ensure_schema(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("ALTER TABLE memory_vault ADD COLUMN IF NOT EXISTS fact_key VARCHAR(80)")
+    conn.commit()
+
+
+def reembed_if_model_changed(conn) -> None:
+    """Vectors from a different model live in a different space, so re-encode
+    every stored fact once whenever the configured model changes."""
+    with conn.cursor() as cur:
+        cur.execute("CREATE TABLE IF NOT EXISTS embedding_meta (model TEXT NOT NULL)")
+        cur.execute("SELECT model FROM embedding_meta LIMIT 1")
+        row = cur.fetchone()
+        if row and row[0] == MODEL_NAME:
+            return
+
+        cur.execute("SELECT id, fact FROM memory_vault")
+        rows = cur.fetchall()
+        logger.info("Embedding model changed to %s; re-embedding %d facts", MODEL_NAME, len(rows))
+        for fact_id, fact in rows:
+            cur.execute(
+                "UPDATE memory_vault SET embedding = %s WHERE id = %s",
+                (str(encode(fact)), fact_id),
+            )
+        cur.execute("DELETE FROM embedding_meta")
+        cur.execute("INSERT INTO embedding_meta (model) VALUES (%s)", (MODEL_NAME,))
+    conn.commit()
+
+
 @app.on_event("startup")
 def startup_event():
     global model
@@ -78,6 +108,8 @@ def startup_event():
                 cur.execute("SELECT 1 FROM pg_extension WHERE extname='vector'")
                 if not cur.fetchone():
                     raise RuntimeError("pgvector extension is not installed")
+            ensure_schema(conn)
+            reembed_if_model_changed(conn)
         logger.info("Database connection verified")
     except Exception as e:
         logger.error("Cannot reach the database: %s", e)
@@ -135,17 +167,24 @@ def semantic_search(request: SearchRequest):
 
 
 @app.post("/ingest", dependencies=[Depends(require_service_token)])
-def ingest_message(user_id: int, message: str, category: str = "General"):
+def ingest_message(user_id: int, message: str, category: str = "General", key: Optional[str] = None):
+    """Stores a fact. A `key` (e.g. "squat_max") marks a value that changes over time:
+    the new fact replaces any earlier one with the same key."""
     try:
         embedding = encode(message)
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                if key:
+                    cur.execute(
+                        "DELETE FROM memory_vault WHERE user_id = %s AND fact_key = %s",
+                        (user_id, key),
+                    )
                 cur.execute(
                     """
-                    INSERT INTO memory_vault (user_id, fact, category, embedding)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO memory_vault (user_id, fact, category, embedding, fact_key)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
-                    (user_id, message, category, str(embedding)),
+                    (user_id, message, category, str(embedding), key or None),
                 )
                 conn.commit()
         return {"status": "success", "message": "Ingested"}
