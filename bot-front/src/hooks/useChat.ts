@@ -8,7 +8,7 @@ import {
   type ChatMessage,
   type StreamRequest,
 } from "../api/chatApi";
-import type { Message } from "../components/chat/ChatWindow";
+import type { Message } from "../components/chat/types";
 import { timeOfDayGreeting } from "../utils/greeting";
 import { createTypewriter } from "../utils/typewriter";
 

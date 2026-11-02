@@ -12,7 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 import { DeleteSweepOutlined, EventNote } from "@mui/icons-material";
-import VoiceOverlay from "../VoiceOverlay";
+import VoiceOverlay from "../voice/VoiceOverlay";
 import FriendAvatar from "../common/FriendAvatar";
 import ChatWindow from "./ChatWindow";
 import ClearConversationDialog from "./ClearConversationDialog";
