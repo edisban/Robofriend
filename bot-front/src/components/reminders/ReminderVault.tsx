@@ -1,202 +1,171 @@
-import {
-  Button,
-  Checkbox,
-  Chip,
-  Paper,
-  Stack,
-  Typography,
-} from "@mui/material";
-import { Delete, Event } from "@mui/icons-material";
-
-export type ReminderItem = {
-  id: number;
-  title: string;
-  scheduledAt: string;
-  status: string;
-  notes?: string;
-};
+import { Box, Checkbox, Chip, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import { DeleteOutlined, EventNote, Schedule } from "@mui/icons-material";
+import type { ReminderItem } from "../../api/reminderApi";
 
 type ReminderVaultProps = {
   reminders: ReminderItem[];
   onDoneToggle: (id: number) => void;
   onDelete: (id: number) => void;
+  /** Hide the title when the panel sits under tabs that already name it. */
+  showHeader?: boolean;
 };
+
+function formatWhen(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (date.toDateString() === today.toDateString()) return `Today · ${time}`;
+  if (date.toDateString() === tomorrow.toDateString()) return `Tomorrow · ${time}`;
+  return `${date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · ${time}`;
+}
+
+function ReminderRow({
+  item,
+  onDoneToggle,
+  onDelete,
+}: {
+  item: ReminderItem;
+  onDoneToggle: (id: number) => void;
+  onDelete: (id: number) => void;
+}) {
+  const done = item.status === "DONE";
+  // SENT means the reminder already fired but hasn't been ticked off yet.
+  const overdue = item.status === "SENT";
+
+  return (
+    <Stack
+      direction="row"
+      spacing={0.5}
+      sx={{
+        alignItems: "center",
+        pl: 0.5,
+        pr: 0.5,
+        py: 0.75,
+        borderRadius: 3,
+        bgcolor: (t) => t.glass.surfaceSubtle,
+        border: (t) => `1px solid ${t.glass.border}`,
+        opacity: done ? 0.6 : 1,
+        transition: "border-color 0.2s ease, transform 0.2s ease",
+        "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)" },
+        "&:hover .reminder-delete": { opacity: 1 },
+      }}
+    >
+      <Checkbox
+        checked={done}
+        onChange={() => onDoneToggle(item.id)}
+        size="small"
+        slotProps={{ input: { "aria-label": `Mark "${item.title}" as done` } }}
+        sx={{ "&.Mui-checked": { color: "secondary.main" } }}
+      />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 600,
+            textDecoration: done ? "line-through" : "none",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.title}
+        </Typography>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: overdue ? "warning.main" : "text.secondary" }}>
+          <Schedule sx={{ fontSize: 13 }} />
+          <Typography variant="caption" sx={{ color: "inherit" }}>
+            {formatWhen(item.scheduledAt)}
+          </Typography>
+        </Stack>
+      </Box>
+      <Tooltip title="Delete">
+        <IconButton
+          className="reminder-delete"
+          size="small"
+          onClick={() => onDelete(item.id)}
+          aria-label={`Delete "${item.title}"`}
+          sx={{
+            opacity: { xs: 0.7, md: 0 },
+            transition: "opacity 0.15s ease",
+            color: "text.secondary",
+            "&:hover": { color: "error.main" },
+          }}
+        >
+          <DeleteOutlined fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Stack>
+  );
+}
 
 export default function ReminderVault({
   reminders,
   onDoneToggle,
   onDelete,
+  showHeader = true,
 }: ReminderVaultProps) {
-  const formatDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString([], {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return iso;
-    }
-  };
+  const sorted = reminders
+    .slice()
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+  const open = sorted.filter((r) => r.status !== "DONE");
+  const done = sorted.filter((r) => r.status === "DONE");
 
   return (
-    <Paper
-      sx={{
-        width: { xs: "100%", md: 260 },
-        height: "100%",
-        p: { xs: 1, md: 2 },
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        borderRadius: 3,
-        marginLeft: { xs: 0, md: 2 },
-      }}
-    >
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Stack
         direction="row"
         spacing={1}
-        sx={{
-          mb: { xs: 1, md: 2 },
-          alignItems: "center",
-          px: { xs: 1, md: 2 },
-          mt: { xs: 0, md: -1 },
-        }}
+        sx={{ alignItems: "center", px: 2.5, pt: 2.25, pb: 1.5, display: showHeader ? "flex" : "none" }}
       >
-        <Event color="secondary" />
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 600,
-            letterSpacing: -0.2,
-            fontSize: { xs: 16, md: 20 },
-          }}
-        >
+        <EventNote sx={{ color: "secondary.main" }} />
+        <Typography variant="h6" sx={{ fontSize: 17, flex: 1 }}>
           Reminders
         </Typography>
+        {open.length > 0 && (
+          <Chip label={`${open.length} upcoming`} size="small" color="secondary" variant="outlined" />
+        )}
       </Stack>
 
-      {reminders.length === 0 ? (
-        <Paper
-          variant="outlined"
+      {sorted.length === 0 ? (
+        <Box
           sx={{
-            borderStyle: "dashed",
-            borderRadius: 2,
-            p: { xs: 2, md: 3 },
+            m: 2,
+            mt: 1,
+            p: 3,
             textAlign: "center",
-            mt: "auto",
-            mb: "auto",
-            borderColor: "rgba(255, 255, 255, 0.08)",
+            borderRadius: 4,
+            border: (t) => `1px dashed ${t.glass.border}`,
             color: "text.secondary",
           }}
         >
-          <Typography variant="body2">No reminders yet</Typography>
-        </Paper>
+          <Typography sx={{ fontSize: 30, mb: 1 }}>🗓️</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: "text.primary" }}>
+            Nothing planned yet
+          </Typography>
+          <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
+            Just tell me in the chat, like “remind me Friday at 6pm to buy flowers”.
+          </Typography>
+        </Box>
       ) : (
-        <Stack
-          spacing={1}
-          sx={{ flex: 1, overflowY: "auto", px: { xs: 1, md: 2 } }}
-        >
-          {reminders
-            .slice()
-            .sort(
-              (a, b) =>
-                new Date(a.scheduledAt).getTime() -
-                new Date(b.scheduledAt).getTime(),
-            )
-            .map((item) => (
-              <Paper
-                key={item.id}
-                variant="outlined"
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  p: { xs: 0.75, md: 1.25 },
-                  borderRadius: 3,
-                  borderColor:
-                    item.status === "DONE"
-                      ? "rgba(255, 255, 255, 0.08)"
-                      : "divider",
-                  bgcolor:
-                    item.status === "DONE"
-                      ? "rgba(255, 255, 255, 0.03)"
-                      : "background.paper",
-                  transition: "all 0.2s ease",
-                  "&:hover": {
-                    borderColor: "primary.main",
-                    boxShadow: "0 4px 16px rgba(99, 102, 241, 0.15)",
-                  },
-                }}
-              >
-                <Checkbox
-                  edge="start"
-                  checked={item.status === "DONE"}
-                  onClick={() => onDoneToggle(item.id)}
-                  sx={{
-                    ml: 0,
-                    color:
-                      item.status === "DONE"
-                        ? "secondary.main"
-                        : "text.secondary",
-                    "&:hover": { color: "secondary.main" },
-                  }}
-                />
-                <Stack
-                  direction="column"
-                  spacing={0.25}
-                  sx={{ flex: 1, minWidth: 0 }}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      textDecoration:
-                        item.status === "DONE" ? "line-through" : "none",
-                      color:
-                        item.status === "DONE"
-                          ? "text.secondary"
-                          : "text.primary",
-                      fontWeight: 500,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.title}
-                  </Typography>
-                  <Chip
-                    label={formatDate(item.scheduledAt)}
-                    icon={<Event fontSize="inherit" />}
-                    size="small"
-                    variant="outlined"
-                    color="default"
-                    sx={{
-                      fontSize: 9,
-                      px: 0.5,
-                      borderColor: "rgba(255, 255, 255, 0.12)",
-                      color: "text.secondary",
-                    }}
-                  />
-                </Stack>
-                <Button
-                  size="small"
-                  onClick={() => onDelete(item.id)}
-                  sx={{
-                    p: 0.5,
-                    color: "text.secondary",
-                    "&:hover": {
-                      color: "error.main",
-                      bgcolor: "rgba(239, 68, 68, 0.1)",
-                    },
-                  }}
-                  title="Delete reminder"
-                >
-                  <Delete fontSize="small" />
-                </Button>
-              </Paper>
-            ))}
+        <Stack spacing={1} sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: 1.5, pb: 2 }}>
+          {open.map((item) => (
+            <ReminderRow key={item.id} item={item} onDoneToggle={onDoneToggle} onDelete={onDelete} />
+          ))}
+          {done.length > 0 && (
+            <Typography
+              variant="caption"
+              sx={{ px: 1, pt: open.length ? 1 : 0, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8 }}
+            >
+              Done
+            </Typography>
+          )}
+          {done.map((item) => (
+            <ReminderRow key={item.id} item={item} onDoneToggle={onDoneToggle} onDelete={onDelete} />
+          ))}
         </Stack>
       )}
-    </Paper>
+    </Box>
   );
 }

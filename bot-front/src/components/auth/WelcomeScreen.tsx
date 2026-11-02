@@ -1,10 +1,25 @@
-import { Box, Paper, Stack, Avatar, Typography, Button } from "@mui/material";
-import { SmartToy } from "@mui/icons-material";
+import { Box, Button, Paper, Stack, Typography } from "@mui/material";
+import {
+  ArrowForward,
+  ChatBubbleOutlined,
+  EventAvailable,
+  GraphicEq,
+  Psychology,
+} from "@mui/icons-material";
+import FriendAvatar from "../common/FriendAvatar";
+import { timeOfDayGreeting } from "../../utils/greeting";
 
 type WelcomeScreenProps = {
   username: string | undefined;
   onEnterChat: () => void;
 };
+
+const FEATURES = [
+  { icon: <ChatBubbleOutlined fontSize="small" />, label: "Talk about anything" },
+  { icon: <Psychology fontSize="small" />, label: "Remembers what matters" },
+  { icon: <EventAvailable fontSize="small" />, label: "Keeps your reminders" },
+  { icon: <GraphicEq fontSize="small" />, label: "Hands-free voice chat" },
+];
 
 export default function WelcomeScreen({
   username,
@@ -13,43 +28,76 @@ export default function WelcomeScreen({
   return (
     <Box
       sx={{
-        minHeight: "100vh",
+        minHeight: "100%",
         display: "grid",
         placeItems: "center",
-        px: { xs: 1, md: 2 },
+        px: 2,
+        py: 4,
       }}
     >
       <Paper
         sx={{
           width: "100%",
-          maxWidth: 520,
+          maxWidth: 540,
           p: { xs: 3, md: 5 },
           textAlign: "center",
-          borderRadius: 2,
-          mx: { xs: 1, md: 0 },
+          borderRadius: 7,
         }}
       >
-        <Stack spacing={3}>
-          <Avatar
-            sx={{ width: 72, height: 72, bgcolor: "primary.main", mx: "auto" }}
+        <Stack spacing={3} sx={{ alignItems: "center" }}>
+          <FriendAvatar size={84} online />
+
+          <Box>
+            <Typography
+              variant="h3"
+              sx={{ fontSize: { xs: "1.9rem", md: "2.6rem" }, lineHeight: 1.15 }}
+            >
+              {timeOfDayGreeting()}, {username || "friend"} 👋
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mt: 1.5 }}>
+              How are you feeling today? I'm here whenever you want to talk,
+              plan your day, or just think out loud.
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+              gap: 1.25,
+              width: "100%",
+            }}
           >
-            <SmartToy sx={{ fontSize: 34 }} />
-          </Avatar>
+            {FEATURES.map((feature) => (
+              <Stack
+                key={feature.label}
+                direction="row"
+                spacing={1.25}
+                sx={{
+                  alignItems: "center",
+                  px: 1.75,
+                  py: 1.25,
+                  borderRadius: 3,
+                  bgcolor: (t) => t.glass.surfaceSubtle,
+                  border: (t) => `1px solid ${t.glass.border}`,
+                  color: "text.secondary",
+                  textAlign: "left",
+                }}
+              >
+                <Box sx={{ color: "primary.main", display: "flex" }}>{feature.icon}</Box>
+                <Typography variant="body2">{feature.label}</Typography>
+              </Stack>
+            ))}
+          </Box>
 
-          <Typography
-            variant="h3"
-            sx={{ fontSize: { xs: "2rem", md: "3rem" } }}
+          <Button
+            variant="contained"
+            size="large"
+            onClick={onEnterChat}
+            endIcon={<ArrowForward />}
+            sx={{ px: 4, py: 1.4 }}
           >
-            Welcome {username || "friend"}, how are you today?
-          </Typography>
-
-          <Typography variant="body1" color="text.secondary">
-            I am ready to help with your plans, reminders, memory, and
-            conversation.
-          </Typography>
-
-          <Button variant="contained" size="large" onClick={onEnterChat}>
-            Open conversation
+            Let's talk
           </Button>
         </Stack>
       </Paper>

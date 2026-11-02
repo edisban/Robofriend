@@ -1,11 +1,14 @@
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
   "";
 
 const TOKEN_KEY = "robofriend-user";
 
-function getToken(): string | null {
+/** Fired when the backend rejects the stored token, so the app can sign out. */
+export const AUTH_EXPIRED_EVENT = "robofriend:auth-expired";
+
+export function getToken(): string | null {
   try {
     const raw = localStorage.getItem(TOKEN_KEY);
     if (!raw) return null;
@@ -34,6 +37,9 @@ export async function apiFetch<T>(
   });
 
   if (!response.ok) {
+    if (token && (response.status === 401 || response.status === 403)) {
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
     let message = `Request failed: ${response.status}`;
     try {
       const body = (await response.json()) as {
