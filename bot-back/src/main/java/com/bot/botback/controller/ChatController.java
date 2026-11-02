@@ -1,5 +1,6 @@
 package com.bot.botback.controller;
 
+import com.bot.botback.config.StreamingConfig;
 import com.bot.botback.dto.ChatMessageResponse;
 import com.bot.botback.dto.MessageRequest;
 import com.bot.botback.model.ChatMessage;
@@ -7,10 +8,12 @@ import com.bot.botback.security.CurrentUser;
 import com.bot.botback.service.AiService;
 import com.bot.botback.service.ChatService;
 import com.bot.botback.service.CheckInService;
-import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,8 +34,6 @@ import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -46,19 +47,16 @@ public class ChatController {
     private final AiService aiService;
     private final CurrentUser currentUser;
     private final CheckInService checkInService;
-    private final ExecutorService streamExecutor = Executors.newFixedThreadPool(16);
+    private final TaskExecutor streamExecutor;
 
     public ChatController(ChatService chatService, AiService aiService, CurrentUser currentUser,
-                          CheckInService checkInService) {
+                          CheckInService checkInService,
+                          @Qualifier(StreamingConfig.REPLY_STREAM_EXECUTOR) TaskExecutor streamExecutor) {
         this.chatService = chatService;
         this.aiService = aiService;
         this.currentUser = currentUser;
         this.checkInService = checkInService;
-    }
-
-    @PreDestroy
-    void shutdown() {
-        streamExecutor.shutdown();
+        this.streamExecutor = streamExecutor;
     }
 
     @GetMapping("/history/{userId}")
@@ -99,28 +97,36 @@ public class ChatController {
         ChatService.Turn turn = chatService.startTurn(userId, req);
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-        streamExecutor.execute(() -> {
-            ClientChannel channel = new ClientChannel(emitter);
-            String reply;
-            try {
-                reply = aiService.generateReply(userId, turn.message(), zone,
-                        token -> channel.send("token", Map.of("t", token)), turn.remember());
-            } catch (Exception e) {
-                log.error("Reply generation failed for user {}: {}", userId, e.getMessage());
-                reply = CONNECTION_TROUBLE;
-                channel.send("token", Map.of("t", reply));
-            }
-            // Saved even if the user closed the tab mid-stream, so it's there next time.
-            ChatMessage saved = chatService.save(userId, "BOT", reply);
-
-            Map<String, Object> done = new HashMap<>();
-            done.put("reply", reply);
-            done.put("botMessageId", saved.getId());
-            done.put("userMessageId", turn.userMessageId());
-            channel.send("done", done);
-            emitter.complete();
-        });
+        try {
+            streamExecutor.execute(() -> streamReply(emitter, userId, zone, turn));
+        } catch (TaskRejectedException e) {
+            log.warn("Reply stream pool is full; refusing a reply for user {}", userId);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "RoboFriend is a bit busy right now. Try again in a moment.");
+        }
         return emitter;
+    }
+
+    private void streamReply(SseEmitter emitter, Long userId, ZoneId zone, ChatService.Turn turn) {
+        ClientChannel channel = new ClientChannel(emitter);
+        String reply;
+        try {
+            reply = aiService.generateReply(userId, turn.message(), zone,
+                    token -> channel.send("token", Map.of("t", token)), turn.remember());
+        } catch (Exception e) {
+            log.error("Reply generation failed for user {}: {}", userId, e.getMessage());
+            reply = CONNECTION_TROUBLE;
+            channel.send("token", Map.of("t", reply));
+        }
+        // Saved even if the user closed the tab mid-stream, so it's there next time.
+        ChatMessage saved = chatService.save(userId, "BOT", reply);
+
+        Map<String, Object> done = new HashMap<>();
+        done.put("reply", reply);
+        done.put("botMessageId", saved.getId());
+        done.put("userMessageId", turn.userMessageId());
+        channel.send("done", done);
+        emitter.complete();
     }
 
     /** Called when the app opens: RoboFriend's first message of the day, if it has something to say. */
