@@ -39,26 +39,26 @@ public class CheckInService {
     private final ChatMessageRepository chatMessageRepository;
     private final ReminderRepository reminderRepository;
     private final MemoryService memoryService;
-    private final AiService aiService;
+    private final GroqClient groqClient;
     private final ListService listService;
 
     public CheckInService(UserRepository userRepository,
                           ChatMessageRepository chatMessageRepository,
                           ReminderRepository reminderRepository,
                           MemoryService memoryService,
-                          AiService aiService,
+                          GroqClient groqClient,
                           ListService listService) {
         this.userRepository = userRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.reminderRepository = reminderRepository;
         this.memoryService = memoryService;
-        this.aiService = aiService;
+        this.groqClient = groqClient;
         this.listService = listService;
     }
 
     /** Returns RoboFriend's opening message for today, already saved to the chat, if it has one. */
     public Optional<ChatMessage> checkIn(Long userId, ZoneId zone) {
-        if (!aiService.isGroqConfigured()) {
+        if (!groqClient.isConfigured()) {
             return Optional.empty();
         }
         ZonedDateTime now = ZonedDateTime.now(zone);
@@ -68,7 +68,7 @@ public class CheckInService {
 
         String text;
         try {
-            text = aiService.complete(buildPrompt(userId, now), 0.8);
+            text = groqClient.complete(buildPrompt(userId, now), 0.8);
         } catch (Exception e) {
             log.warn("Daily check-in failed for user {}: {}", userId, e.getMessage());
             return Optional.empty();

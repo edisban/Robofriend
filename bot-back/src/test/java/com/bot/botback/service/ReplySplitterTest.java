@@ -14,7 +14,7 @@ class ReplySplitterTest {
     @Test
     void streamsReplyAndHidesMetaEvenWhenMarkerIsSplitAcrossChunks() {
         List<String> shown = new ArrayList<>();
-        AiService.ReplySplitter splitter = new AiService.ReplySplitter(shown::add);
+        ReplySplitter splitter = new ReplySplitter(shown::add);
 
         for (String chunk : List.of("Hey! How", " was your", " day?\n###ME", "TA###\n{\"factsToRemember\":[]}")) {
             splitter.feed(chunk);
@@ -30,7 +30,7 @@ class ReplySplitterTest {
     @Test
     void withoutMarkerEverythingIsReply() {
         List<String> shown = new ArrayList<>();
-        AiService.ReplySplitter splitter = new AiService.ReplySplitter(shown::add);
+        ReplySplitter splitter = new ReplySplitter(shown::add);
 
         splitter.feed("⏰ Time to call Maria!");
         splitter.finish();
@@ -42,14 +42,14 @@ class ReplySplitterTest {
     @Test
     void listOpsAreParsedAndInvalidOnesDropped() throws Exception {
         com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
-        ListService.ListOp add = AiService.parseListOp(json.readTree(
+        ListService.ListOp add = ReplyExtraction.parseListOp(json.readTree(
                 "{\"op\":\"add\",\"list\":\"shopping\",\"items\":[\"milk\",\" \"]}"));
         assertEquals(ListService.Op.ADD, add.op());
         assertEquals(List.of("milk"), add.items());
-        ListService.ListOp clear = AiService.parseListOp(json.readTree("{\"op\":\"clear\",\"list\":\"shopping\"}"));
+        ListService.ListOp clear = ReplyExtraction.parseListOp(json.readTree("{\"op\":\"clear\",\"list\":\"shopping\"}"));
         assertEquals(ListService.Op.CLEAR, clear.op());
-        assertEquals(null, AiService.parseListOp(json.readTree("{\"op\":\"explode\",\"list\":\"x\",\"items\":[\"a\"]}")));
-        assertEquals(null, AiService.parseListOp(json.readTree("{\"op\":\"add\",\"list\":\"shopping\",\"items\":[]}")));
+        assertEquals(null, ReplyExtraction.parseListOp(json.readTree("{\"op\":\"explode\",\"list\":\"x\",\"items\":[\"a\"]}")));
+        assertEquals(null, ReplyExtraction.parseListOp(json.readTree("{\"op\":\"add\",\"list\":\"shopping\",\"items\":[]}")));
     }
 
     @Test
@@ -60,14 +60,14 @@ class ReplySplitterTest {
 
     @Test
     void factKeysAreNormalized() {
-        assertEquals("squat_max", AiService.normalizeKey(" Squat Max "));
-        assertEquals("run_5k_best", AiService.normalizeKey("run-5k best"));
-        assertEquals(null, AiService.normalizeKey("  !! "));
+        assertEquals("squat_max", ReplyExtraction.normalizeKey(" Squat Max "));
+        assertEquals("run_5k_best", ReplyExtraction.normalizeKey("run-5k best"));
+        assertEquals(null, ReplyExtraction.normalizeKey("  !! "));
     }
 
     @Test
     void greekMessagesGetAnExplicitGreekDirective() {
-        assertTrue(AiService.languageDirective("πάμε για καφέ αύριο;").contains("Greek"));
-        assertFalse(AiService.languageDirective("shall we get coffee tomorrow?").contains("Greek"));
+        assertTrue(PromptBuilder.languageDirective("πάμε για καφέ αύριο;").contains("Greek"));
+        assertFalse(PromptBuilder.languageDirective("shall we get coffee tomorrow?").contains("Greek"));
     }
 }
