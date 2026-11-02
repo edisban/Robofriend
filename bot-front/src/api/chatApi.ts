@@ -1,9 +1,4 @@
-import {
-  API_BASE_URL,
-  AUTH_EXPIRED_EVENT,
-  apiFetch,
-  getToken,
-} from "./apiClient";
+import { apiFetch, authFetch } from "./apiClient";
 
 export type ChatMessage = {
   id?: number;
@@ -72,21 +67,13 @@ export async function streamChatMessage(
   request: StreamRequest,
   onToken: (text: string) => void,
 ): Promise<StreamResult> {
-  const token = getToken();
-  const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+  const response = await authFetch("/api/chat/stream", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { Accept: "text/event-stream" },
     body: JSON.stringify({ ...request, timeZone: localTimeZone() }),
   });
 
   if (!response.ok || !response.body) {
-    if (token && (response.status === 401 || response.status === 403)) {
-      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
-    }
     throw new Error(`Request failed: ${response.status}`);
   }
 

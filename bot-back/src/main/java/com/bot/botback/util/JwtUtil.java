@@ -1,14 +1,17 @@
 package com.bot.botback.util;
 
+import com.bot.botback.config.AuthProperties;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
 
+/** Issues and checks the short-lived access tokens kept in the HttpOnly access cookie. */
 @Component
 public class JwtUtil {
 
@@ -16,12 +19,16 @@ public class JwtUtil {
     static final int MIN_SECRET_BYTES = 32;
 
     private final SecretKey key;
-    private final long expirationMs;
+    private final Duration accessTokenTtl;
 
-    public JwtUtil(@Value("${jwt.secret:}") String secret,
-                   @Value("${jwt.expiration-ms:86400000}") long expirationMs) {
+    @Autowired
+    public JwtUtil(AuthProperties properties) {
+        this(properties.jwtSecret(), properties.accessTokenTtl());
+    }
+
+    JwtUtil(String secret, Duration accessTokenTtl) {
         this.key = Keys.hmacShaKeyFor(requireStrongSecret(secret).getBytes(StandardCharsets.UTF_8));
-        this.expirationMs = expirationMs;
+        this.accessTokenTtl = accessTokenTtl;
     }
 
     /**
@@ -42,11 +49,15 @@ public class JwtUtil {
         return secret;
     }
 
+    public Duration accessTokenTtl() {
+        return accessTokenTtl;
+    }
+
     public String generate(String username) {
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expirationMs))
+                .expiration(new Date(System.currentTimeMillis() + accessTokenTtl.toMillis()))
                 .signWith(key)
                 .compact();
     }

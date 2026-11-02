@@ -93,6 +93,16 @@ pip install -r requirements.txt
 uvicorn main:app --port 8000
 ```
 
+## Authentication
+
+- Passwords are hashed with BCrypt; sign-up requires 8-72 characters. Failed logins are rate-limited.
+- The session lives in two **HttpOnly, Secure, SameSite=Strict cookies**, so page scripts never see a token:
+  - `rf_access`: a JWT valid for 15 minutes, sent with every API call
+  - `rf_refresh`: a random token valid for 30 days, only sent to `/api/auth`, stored hashed in the database and **rotated on every use**; reusing an old one (a stolen copy) ends all of that user's sessions
+- The app renews the access cookie automatically (`POST /api/auth/refresh`) and asks `GET /api/auth/me` who is signed in. `POST /api/auth/logout` revokes the session.
+- State-changing requests carry a CSRF token (`XSRF-TOKEN` cookie echoed as `X-XSRF-TOKEN`).
+- `JWT_SECRET` is required (at least 32 characters); generate one with `openssl rand -base64 48`.
+
 ## API & Database Structure
 
 Entities:

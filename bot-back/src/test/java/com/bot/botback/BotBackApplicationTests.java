@@ -9,7 +9,7 @@ import org.springframework.test.context.TestPropertySource;
         "spring.jpa.hibernate.ddl-auto=none",
         "spring.flyway.enabled=false",
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect",
-        "jwt.secret=test-secret-0123456789-abcdefghijklmnop"
+        "app.auth.jwt-secret=test-secret-0123456789-abcdefghijklmnop"
 })
 class BotBackApplicationTests {
 

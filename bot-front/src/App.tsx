@@ -16,13 +16,13 @@ import AppFooter from "./components/layout/AppFooter";
 import { AUTH_EXPIRED_EVENT, apiFetch } from "./api/apiClient";
 import { getTheme } from "./theme/theme";
 
-const STORAGE_KEY = "robofriend-user";
 const THEME_KEY = "robofriend-theme";
+// Older versions kept the user (and their token) here; the session now lives in HttpOnly cookies.
+const LEGACY_SESSION_KEY = "robofriend-user";
 
 interface SessionUser {
   userId: number;
   username: string;
-  token: string;
 }
 
 type Screen = "login" | "welcome" | "chat";
@@ -36,27 +36,14 @@ function App() {
     }
   });
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [currentUser, setCurrentUser] = useState<SessionUser | null>(() => {
-    const storedUser = localStorage.getItem(STORAGE_KEY);
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser) as SessionUser;
-        if (parsedUser?.userId && parsedUser?.username && parsedUser?.token) {
-          return parsedUser;
-        }
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-    return null;
-  });
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  // Until the server says who is signed in, show nothing behind the intro.
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [screen, setScreen] = useState<Screen>(() =>
-    currentUser ? "chat" : "login",
-  );
+  const [screen, setScreen] = useState<Screen>("login");
   const [snackbar, setSnackbar] = useState<{
     message: string;
     severity: "success" | "warning";
@@ -70,9 +57,24 @@ function App() {
     }
   }, [darkMode]);
 
+  // Restore the session from the cookies (renewing it if the access token has expired).
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_SESSION_KEY);
+    } catch {
+      void 0;
+    }
+    apiFetch<SessionUser>("/api/auth/me", undefined, { notifyExpired: false })
+      .then((user) => {
+        setCurrentUser(user);
+        setScreen("chat");
+      })
+      .catch(() => setScreen("login"))
+      .finally(() => setSessionChecked(true));
+  }, []);
+
   useEffect(() => {
     const handleExpired = () => {
-      localStorage.removeItem(STORAGE_KEY);
       setCurrentUser(null);
       setScreen("login");
       setSnackbar({
@@ -100,21 +102,11 @@ function App() {
       const endpoint =
         authMode === "login" ? "/api/auth/login" : "/api/auth/register";
 
-      const data = await apiFetch<{ userId: number; username?: string; token?: string }>(
-        endpoint,
-        {
-          method: "POST",
-          body: JSON.stringify({ username: trimmedUsername, password }),
-        },
-      );
+      const user = await apiFetch<SessionUser>(endpoint, {
+        method: "POST",
+        body: JSON.stringify({ username: trimmedUsername, password }),
+      });
 
-      const user = {
-        userId: Number(data.userId),
-        username: data.username || trimmedUsername,
-        token: data.token || "",
-      };
-
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
       setCurrentUser(user);
       setScreen("welcome");
       setPassword("");
@@ -134,8 +126,9 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEY);
+  const handleLogout = async () => {
+    // Ends the session on the server too; the cookies are cleared either way.
+    await apiFetch<void>("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     setCurrentUser(null);
     setUsername("");
     setPassword("");
@@ -143,6 +136,9 @@ function App() {
   };
 
   const renderScreen = () => {
+    if (!sessionChecked) {
+      return null;
+    }
     if (screen === "chat" && currentUser) {
       return (
         <ChatScreen currentUser={currentUser} />
