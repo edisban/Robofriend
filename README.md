@@ -102,4 +102,4 @@ Entities:
 - `MemoryVault` — long-term memory facts with vector embeddings.
 - `Reminder` — scheduled reminders with status (PENDING/DONE).
 
-Health check: `GET /api/health`. Memory service health: `GET /health`.
+Health check: `GET /actuator/health` (includes the database). Memory service health: `GET /health`.

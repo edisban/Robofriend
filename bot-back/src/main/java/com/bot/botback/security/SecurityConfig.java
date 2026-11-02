@@ -27,7 +27,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> a
                 // Streamed replies finish on an async dispatch; the request was already authorized.
                 .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
-                .requestMatchers("/", "/api/health", "/api/auth/**").permitAll()
+                .requestMatchers("/", "/actuator/health", "/api/auth/**").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(new JwtFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
         return http.build();
