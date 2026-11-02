@@ -602,7 +602,11 @@ public class AiService {
             log.error("Failed to persist extracted reminder: {}", e.getMessage());
         }
         if (!result.listOps().isEmpty()) {
-            listService.apply(userId, result.listOps());
+            try {
+                listService.apply(userId, result.listOps());
+            } catch (Exception e) {
+                log.error("Failed to update lists for user {}: {}", userId, e.getMessage());
+            }
         }
     }
 

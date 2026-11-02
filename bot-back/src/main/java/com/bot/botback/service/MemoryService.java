@@ -70,6 +70,11 @@ public class MemoryService {
         }
     }
 
+    /** Everything remembered about the user, newest first. */
+    public List<MemoryVault> memoriesOf(Long userId) {
+        return memoryVaultRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
     /** Most recent memories, newest first; used for the daily check-in. */
     public List<Memory> recentMemories(Long userId) {
         try {

@@ -4,7 +4,10 @@ import com.bot.botback.model.ListItem;
 import com.bot.botback.repository.ListItemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.text.Normalizer;
 import java.time.OffsetDateTime;
@@ -34,26 +37,55 @@ public class ListService {
         this.repository = repository;
     }
 
+    /** Applies one message's list changes together. */
+    @Transactional
     public void apply(Long userId, List<ListOp> ops) {
         for (ListOp op : ops) {
             String list = normalizeListName(op.list());
             if (list == null) {
                 continue;
             }
-            try {
-                switch (op.op()) {
-                    case ADD -> add(userId, list, op.items());
-                    case DONE -> markDone(userId, list, op.items());
-                    case REMOVE -> remove(userId, list, op.items());
-                    case CLEAR -> clear(userId, list);
-                }
-            } catch (Exception e) {
-                log.error("List op {} on '{}' failed for user {}: {}", op.op(), list, userId, e.getMessage());
+            switch (op.op()) {
+                case ADD -> add(userId, list, op.items());
+                case DONE -> markDone(userId, list, op.items());
+                case REMOVE -> remove(userId, list, op.items());
+                case CLEAR -> clear(userId, list);
             }
         }
     }
 
+    @Transactional(readOnly = true)
+    public List<ListItem> itemsOf(Long userId) {
+        return repository.findByUserIdOrderByListNameAscDoneAscCreatedAtAsc(userId);
+    }
+
+    @Transactional
+    public ListItem setDone(Long userId, Long itemId, boolean done) {
+        ListItem item = owned(userId, itemId);
+        item.setDone(done);
+        item.setDoneAt(done ? OffsetDateTime.now(ZoneOffset.UTC) : null);
+        return repository.save(item);
+    }
+
+    @Transactional
+    public void deleteItem(Long userId, Long itemId) {
+        repository.delete(owned(userId, itemId));
+    }
+
+    /** Removes the ticked-off items from one list; returns how many. */
+    @Transactional
+    public int clearDone(Long userId, String listName) {
+        return repository.deleteDone(userId, listName);
+    }
+
+    private ListItem owned(Long userId, Long itemId) {
+        return repository.findById(itemId)
+                .filter(item -> userId.equals(item.getUserId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
     /** Open items grouped by list, for the prompt. */
+    @Transactional(readOnly = true)
     public Map<String, List<String>> openItems(Long userId) {
         return repository.findByUserIdAndDoneFalseOrderByListNameAscCreatedAtAsc(userId).stream()
                 .collect(Collectors.groupingBy(item -> item.getListName(), LinkedHashMap::new,

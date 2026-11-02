@@ -1,7 +1,7 @@
 package com.bot.botback.controller;
 
 import com.bot.botback.dto.MemoryResponse;
-import com.bot.botback.repository.MemoryVaultRepository;
+import com.bot.botback.service.MemoryService;
 import com.bot.botback.security.CurrentUser;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,18 +16,18 @@ import java.util.List;
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://localhost:80"})
 public class MemoryController {
 
-    private final MemoryVaultRepository memoryVaultRepository;
+    private final MemoryService memoryService;
     private final CurrentUser currentUser;
 
-    public MemoryController(MemoryVaultRepository memoryVaultRepository, CurrentUser currentUser) {
-        this.memoryVaultRepository = memoryVaultRepository;
+    public MemoryController(MemoryService memoryService, CurrentUser currentUser) {
+        this.memoryService = memoryService;
         this.currentUser = currentUser;
     }
 
     @GetMapping("/{userId}")
     public List<MemoryResponse> getMemory(@PathVariable Long userId) {
         currentUser.requireSelf(userId);
-        return memoryVaultRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+        return memoryService.memoriesOf(userId).stream()
                 .map(memory -> MemoryResponse.from(memory))
                 .toList();
     }
