@@ -30,9 +30,6 @@ public class User {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(nullable = false, length = 20)
-    private String role = "USER";
-
     /** The user's local date of the last daily check-in, so RoboFriend reaches out at most once a day. */
     @Column(name = "last_checkin_on")
     private LocalDate lastCheckinOn;
@@ -41,13 +38,6 @@ public class User {
     private OffsetDateTime createdAt;
 
     public User() {
-    }
-
-    public User(Long id, String username, String passwordHash, OffsetDateTime createdAt) {
-        this.id = id;
-        this.username = username;
-        this.passwordHash = passwordHash;
-        this.createdAt = createdAt;
     }
 
     @PrePersist

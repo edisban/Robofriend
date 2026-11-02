@@ -26,9 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -61,7 +63,7 @@ class AuthFlowIntegrationTest {
     void migrationsCreateTheFullSchema() {
         List<String> versions = jdbc.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class);
-        assertEquals(List.of("1", "2", "3"), versions);
+        assertEquals(List.of("1", "2", "3", "4"), versions);
         Integer tables = jdbc.queryForObject("""
                 select count(*) from information_schema.tables
                 where table_schema = 'public' and table_name in
@@ -112,11 +114,7 @@ class AuthFlowIntegrationTest {
         Long aliceId = userRepository.findByUsername("it_alice").orElseThrow().getId();
 
         // No Groq key in tests, so RoboFriend answers with its local fallback.
-        mvc.perform(post("/api/chat/send").with(csrf()).cookie(alice)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello from an integration test\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.reply").isNotEmpty());
+        chat(alice, "hello from an integration test");
 
         mvc.perform(get("/api/chat/history/" + aliceId).cookie(alice))
                 .andExpect(status().isOk())
@@ -130,10 +128,7 @@ class AuthFlowIntegrationTest {
     void deletingAUserRemovesAllTheirData() throws Exception {
         Cookie session = register("it_leaving");
         Long userId = userRepository.findByUsername("it_leaving").orElseThrow().getId();
-        mvc.perform(post("/api/chat/send").with(csrf()).cookie(session)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"remember me\"}"))
-                .andExpect(status().isOk());
+        chat(session, "remember me");
         jdbc.update("insert into list_items(user_id, list_name, text, done) values (?, 'shopping', 'milk', false)", userId);
 
         userRepository.deleteById(userId);
@@ -150,6 +145,16 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return cookie(result, AuthCookies.ACCESS);
+    }
+
+    /** Sends a message through the streaming endpoint and waits for the reply to finish. */
+    private void chat(Cookie session, String message) throws Exception {
+        MvcResult started = mvc.perform(post("/api/chat/stream").with(csrf()).cookie(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"" + message + "\"}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mvc.perform(asyncDispatch(started)).andExpect(status().isOk());
     }
 
     private int count(String table, Long userId) {

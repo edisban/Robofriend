@@ -42,14 +42,6 @@ public class MemoryVault {
     public MemoryVault() {
     }
 
-    public MemoryVault(Long id, Long userId, String fact, String embedding, OffsetDateTime createdAt) {
-        this.id = id;
-        this.userId = userId;
-        this.fact = fact;
-        this.embedding = embedding;
-        this.createdAt = createdAt;
-    }
-
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

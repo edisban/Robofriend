@@ -29,10 +29,6 @@ EMBEDDING_DIM = 384
 model = None
 
 
-class EmbeddingRequest(BaseModel):
-    text: str
-
-
 class SearchRequest(BaseModel):
     query: str
     user_id: Optional[int] = None
@@ -106,16 +102,6 @@ def startup_event():
     except Exception as e:
         logger.error("Cannot reach the database: %s", e)
         raise
-
-
-@app.post("/embed", dependencies=[Depends(require_service_token)])
-def embed_text(request: EmbeddingRequest):
-    try:
-        embedding = encode(request.text)
-        return {"embedding": embedding, "dimension": len(embedding)}
-    except Exception as e:
-        logger.exception("Embedding error")
-        raise HTTPException(status_code=500, detail="Embedding failed") from e
 
 
 @app.post("/search", response_model=List[SearchResult], dependencies=[Depends(require_service_token)])

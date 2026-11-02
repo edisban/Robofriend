@@ -47,16 +47,6 @@ public class Reminder {
     public Reminder() {
     }
 
-    public Reminder(Long id, Long userId, String title, OffsetDateTime scheduledAt, ReminderStatus status, String notes, OffsetDateTime createdAt) {
-        this.id = id;
-        this.userId = userId;
-        this.title = title;
-        this.scheduledAt = scheduledAt;
-        this.status = status == null ? ReminderStatus.PENDING : status;
-        this.notes = notes;
-        this.createdAt = createdAt;
-    }
-
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

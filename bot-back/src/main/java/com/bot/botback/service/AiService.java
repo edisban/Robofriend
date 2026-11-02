@@ -45,14 +45,6 @@ public class AiService {
         return groqClient.isConfigured();
     }
 
-    public String generateReply(Long userId, String userMessage) {
-        return generateReply(userId, userMessage, ZoneOffset.UTC);
-    }
-
-    public String generateReply(Long userId, String userMessage, ZoneId zone) {
-        return generateReply(userId, userMessage, zone, token -> { }, true);
-    }
-
     /**
      * Generates RoboFriend's reply, pushing it to {@code onToken} piece by piece as the model writes it.
      *

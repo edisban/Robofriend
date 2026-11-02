@@ -35,7 +35,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> a
                 // Streamed replies finish on an async dispatch; the request was already authorized.
                 .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
-                .requestMatchers("/", "/actuator/health").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register",
                         "/api/auth/refresh", "/api/auth/logout").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()

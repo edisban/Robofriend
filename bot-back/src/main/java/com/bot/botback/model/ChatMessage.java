@@ -41,14 +41,6 @@ public class ChatMessage {
     public ChatMessage() {
     }
 
-    public ChatMessage(Long id, Long userId, Sender sender, String content, OffsetDateTime createdAt) {
-        this.id = id;
-        this.userId = userId;
-        this.sender = sender;
-        this.content = content;
-        this.createdAt = createdAt;
-    }
-
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

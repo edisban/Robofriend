@@ -69,23 +69,6 @@ public class ChatController {
                 .toList();
     }
 
-    @PostMapping("/send")
-    public Map<String, String> sendMessage(@Valid @RequestBody MessageRequest req) {
-        if (req.getMessage() == null || req.getMessage().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is empty");
-        }
-        Long userId = currentUser.id();
-        chatService.save(userId, Sender.USER, req.getMessage());
-        String reply;
-        try {
-            reply = aiService.generateReply(userId, req.getMessage(), zoneOf(req.getTimeZone()));
-        } catch (Exception ex) {
-            reply = CONNECTION_TROUBLE;
-        }
-        chatService.save(userId, Sender.BOT, reply);
-        return Map.of("reply", reply);
-    }
-
     /**
      * Streams RoboFriend's reply as server-sent events: {@code token} events carry text as it is
      * written, then one {@code done} event carries the final reply and the saved message ids.

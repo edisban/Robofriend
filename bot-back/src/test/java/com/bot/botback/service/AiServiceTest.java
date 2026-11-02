@@ -6,6 +6,7 @@ import com.bot.botback.repository.ReminderRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,7 +28,7 @@ class AiServiceTest {
                 new ReplyExtraction(memoryService, reminderRepo, listService),
                 reminderRepo);
 
-        String reply = service.generateReply(1L, "Hello there");
+        String reply = service.generateReply(1L, "Hello there", ZoneOffset.UTC, token -> { }, true);
 
         assertTrue(reply.contains("I'm not sure how to help") || reply.contains("Here's what I know about you"));
     }

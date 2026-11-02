@@ -68,11 +68,6 @@ public class MemoryService {
         }
     }
 
-    /** Everything remembered about the user, newest first. */
-    public List<MemoryVault> memoriesOf(Long userId) {
-        return memoryVaultRepository.findByUserIdOrderByCreatedAtDesc(userId);
-    }
-
     /** Most recent memories, newest first; used for the daily check-in. */
     public List<Memory> recentMemories(Long userId) {
         try {
@@ -87,10 +82,6 @@ public class MemoryService {
 
     private static Memory toMemory(MemoryVault row) {
         return new Memory(row.getFact(), row.getCreatedAt());
-    }
-
-    public List<String> searchFacts(Long userId, String query, int limit) {
-        return searchMemories(userId, query, limit).stream().map(m -> m.fact()).toList();
     }
 
     public List<Memory> searchMemories(Long userId, String query, int limit) {
@@ -141,10 +132,6 @@ public class MemoryService {
                 return null;
             }
         }
-    }
-
-    public void ingestFact(Long userId, String fact, String category) {
-        ingestFact(userId, fact, category, null);
     }
 
     public void ingestFact(Long userId, String fact, String category, String key) {

@@ -7,11 +7,6 @@ export type ChatMessage = {
   createdAt?: string;
 };
 
-export type ChatRequest = {
-  userId: number;
-  message: string;
-};
-
 export type StreamRequest =
   | { message: string; replaceFromId?: number }
   | { regenerate: true };
@@ -28,15 +23,6 @@ export async function getChatHistory(
 ): Promise<ChatMessage[]> {
   const query = afterId !== undefined ? `?afterId=${afterId}` : "";
   return apiFetch<ChatMessage[]>(`/api/chat/history/${userId}${query}`);
-}
-
-export async function sendChatMessage(
-  payload: ChatRequest,
-): Promise<{ reply: string }> {
-  return apiFetch<{ reply: string }>("/api/chat/send", {
-    method: "POST",
-    body: JSON.stringify({ ...payload, timeZone: localTimeZone() }),
-  });
 }
 
 /** RoboFriend's first message of the day, if it has something to bring up; otherwise null. */

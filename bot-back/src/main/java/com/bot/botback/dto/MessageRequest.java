@@ -3,8 +3,6 @@ package com.bot.botback.dto;
 import jakarta.validation.constraints.Size;
 
 public class MessageRequest {
-    private Long userId;
-
     /** Empty only for a regenerate request; checked in the controller. */
     @Size(max = 4000, message = "That message is too long (max 4000 characters).")
     private String message;
@@ -15,19 +13,6 @@ public class MessageRequest {
     private Long replaceFromId;
 
     public MessageRequest() {
-    }
-
-    public MessageRequest(Long userId, String message) {
-        this.userId = userId;
-        this.message = message;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
     }
 
     public String getMessage() {
