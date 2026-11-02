@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/1f5f3eb1-01d7-4df6-9432-7f546a30ce33
+
 # RoboFriend - Production-Ready Full-Stack AI Companion
 
 RoboFriend is a full-stack AI companion combining conversational chat, long-term semantic memory, and natural-language reminders. It pairs a Spring Boot backend with a React frontend, backed by PostgreSQL + pgvector, with a Python ML microservice for sentence embeddings, and powered by the Groq (xAI) API.
