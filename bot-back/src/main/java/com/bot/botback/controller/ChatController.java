@@ -3,8 +3,8 @@ package com.bot.botback.controller;
 import com.bot.botback.dto.MessageRequest;
 import com.bot.botback.model.ChatMessage;
 import com.bot.botback.repository.ChatMessageRepository;
+import com.bot.botback.security.CurrentUser;
 import com.bot.botback.service.AiService;
-import com.bot.botback.service.MemoryService;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,16 +23,17 @@ public class ChatController {
 
     private final ChatMessageRepository chatRepo;
     private final AiService aiService;
-    private final MemoryService memoryService;
+    private final CurrentUser currentUser;
 
-    public ChatController(ChatMessageRepository chatRepo, AiService aiService, MemoryService memoryService) {
+    public ChatController(ChatMessageRepository chatRepo, AiService aiService, CurrentUser currentUser) {
         this.chatRepo = chatRepo;
         this.aiService = aiService;
-        this.memoryService = memoryService;
+        this.currentUser = currentUser;
     }
 
     @GetMapping("/history/{userId}")
     public List<ChatMessage> getHistory(@PathVariable Long userId) {
+        currentUser.requireSelf(userId);
         return chatRepo.findByUserIdOrderByCreatedAtAsc(userId);
     }
 
@@ -42,7 +43,7 @@ public class ChatController {
             return Map.of("reply", "Please provide a message to continue.");
         }
 
-        Long userId = req.getUserId() != null ? req.getUserId() : 1L;
+        Long userId = currentUser.id();
 
         ChatMessage userMessage = new ChatMessage();
         userMessage.setUserId(userId);
@@ -62,8 +63,6 @@ public class ChatController {
         botReply.setSender("BOT");
         botReply.setContent(reply);
         chatRepo.save(botReply);
-
-        memoryService.ingestFact(userId, req.getMessage(), "General");
 
         return Map.of("reply", reply);
     }

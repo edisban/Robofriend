@@ -2,6 +2,7 @@ package com.bot.botback.controller;
 
 import com.bot.botback.model.MemoryVault;
 import com.bot.botback.repository.MemoryVaultRepository;
+import com.bot.botback.security.CurrentUser;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,13 +17,16 @@ import java.util.List;
 public class MemoryController {
 
     private final MemoryVaultRepository memoryVaultRepository;
+    private final CurrentUser currentUser;
 
-    public MemoryController(MemoryVaultRepository memoryVaultRepository) {
+    public MemoryController(MemoryVaultRepository memoryVaultRepository, CurrentUser currentUser) {
         this.memoryVaultRepository = memoryVaultRepository;
+        this.currentUser = currentUser;
     }
 
     @GetMapping("/{userId}")
     public List<MemoryVault> getMemory(@PathVariable Long userId) {
+        currentUser.requireSelf(userId);
         return memoryVaultRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 }

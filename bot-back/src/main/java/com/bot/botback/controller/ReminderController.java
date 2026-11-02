@@ -2,6 +2,7 @@ package com.bot.botback.controller;
 
 import com.bot.botback.model.Reminder;
 import com.bot.botback.repository.ReminderRepository;
+import com.bot.botback.security.CurrentUser;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,20 +22,30 @@ import java.util.Map;
 public class ReminderController {
 
     private final ReminderRepository reminderRepository;
+    private final CurrentUser currentUser;
 
-    public ReminderController(ReminderRepository reminderRepository) {
+    public ReminderController(ReminderRepository reminderRepository, CurrentUser currentUser) {
         this.reminderRepository = reminderRepository;
+        this.currentUser = currentUser;
+    }
+
+    private Reminder findOwned(Long reminderId) {
+        Long userId = currentUser.id();
+        return reminderRepository.findById(reminderId)
+                .filter(r -> userId.equals(r.getUserId()))
+                .orElse(null);
     }
 
     @GetMapping("/{userId}")
     public List<Reminder> getReminders(@PathVariable Long userId) {
+        currentUser.requireSelf(userId);
         return reminderRepository.findByUserIdOrderByScheduledAtAsc(userId);
     }
 
     @PatchMapping("/{reminderId}")
     public ResponseEntity<Map<String, String>> updateStatus(@PathVariable Long reminderId,
                                                            @RequestBody Map<String, String> body) {
-        Reminder reminder = reminderRepository.findById(reminderId).orElse(null);
+        Reminder reminder = findOwned(reminderId);
         if (reminder == null) {
             return ResponseEntity.notFound().build();
         }
@@ -49,7 +60,7 @@ public class ReminderController {
 
     @DeleteMapping("/{reminderId}")
     public ResponseEntity<Void> deleteReminder(@PathVariable Long reminderId) {
-        if (!reminderRepository.existsById(reminderId)) {
+        if (findOwned(reminderId) == null) {
             return ResponseEntity.notFound().build();
         }
         reminderRepository.deleteById(reminderId);
