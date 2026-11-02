@@ -11,7 +11,6 @@ services:
       - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U botuser -d botdb"]
       interval: 10s
@@ -43,11 +42,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    # The backend runs the Flyway migrations, so it starts before the memory service.
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      ai-memory-service:
-        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
@@ -93,8 +91,8 @@ services:
       DB_PASSWORD: botpass
       MEMORY_SERVICE_TOKEN: ${MEMORY_SERVICE_TOKEN:-local-dev-token}
     depends_on:
-      db-migrate:
-        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,os,sys; r=urllib.request.Request('http://localhost:8000/health', headers={'X-Service-Token': os.environ.get('MEMORY_SERVICE_TOKEN','')}); sys.exit(0 if urllib.request.urlopen(r, timeout=5).status == 200 else 1)\""]
       interval: 15s

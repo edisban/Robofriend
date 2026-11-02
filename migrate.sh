@@ -33,49 +33,28 @@ SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'app_user', :'app_passwor
 
 SELECT set_config('app.role', :'app_user', false);
 
-DO $migrate$
+-- Extensions need superuser rights, which the app role may not have; the
+-- backend's Flyway migrations rely on this one being present.
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Table structure is managed by the backend's Flyway migrations
+-- (bot-back/src/main/resources/db/migration). This script only handles the
+-- database role, its password, and table ownership for databases created by
+-- an older setup that used a different superuser.
+DO $owner$
 DECLARE
     obj record;
-    col_type text;
-    col_udt text;
 BEGIN
     FOR obj IN
-        SELECT c.relname, c.relkind
+        SELECT c.relname
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'a')
     LOOP
         EXECUTE format('ALTER TABLE public.%I OWNER TO %I', obj.relname, current_setting('app.role'));
     END LOOP;
-
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'role') THEN
-        EXECUTE 'ALTER TABLE public.users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT ''USER''';
-    END IF;
-
-    EXECUTE 'ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_checkin_on DATE';
-    EXECUTE 'ALTER TABLE public.memory_vault ADD COLUMN IF NOT EXISTS fact_key VARCHAR(80)';
-
-    -- list_items may have been created by Hibernate without the cascade to users.
-    IF to_regclass('public.list_items') IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'list_items_user_id_fkey') THEN
-        EXECUTE 'DELETE FROM public.list_items l WHERE NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = l.user_id)';
-        EXECUTE 'ALTER TABLE public.list_items ADD CONSTRAINT list_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE';
-    END IF;
-
-    SELECT data_type, udt_name
-      INTO col_type, col_udt
-      FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = 'memory_vault'
-       AND column_name = 'embedding';
-
-    IF col_type = 'USER-DEFINED' AND col_udt = 'vector' THEN
-        EXECUTE 'DROP INDEX IF EXISTS idx_memory_vault_embedding';
-        EXECUTE 'UPDATE memory_vault SET embedding = NULL WHERE embedding IS NOT NULL AND vector_dims(embedding) <> 384';
-        EXECUTE 'ALTER TABLE memory_vault ALTER COLUMN embedding TYPE text USING embedding::text';
-    END IF;
 END
-$migrate$;
+$owner$;
 
 DO $grants$
 DECLARE
@@ -99,4 +78,4 @@ SQL
 
 run_as_superuser -v ON_ERROR_STOP=1 -v app_user="$APP_USER" -v app_password="$APP_PASSWORD" -f /tmp/migration.sql
 
-echo "migrate: schema and roles are up to date"
+echo "migrate: database role and permissions are up to date"

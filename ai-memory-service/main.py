@@ -67,17 +67,10 @@ def encode(text: str) -> list:
     return model.encode(text).tolist()
 
 
-def ensure_schema(conn) -> None:
-    with conn.cursor() as cur:
-        cur.execute("ALTER TABLE memory_vault ADD COLUMN IF NOT EXISTS fact_key VARCHAR(80)")
-    conn.commit()
-
-
 def reembed_if_model_changed(conn) -> None:
     """Vectors from a different model live in a different space, so re-encode
     every stored fact once whenever the configured model changes."""
     with conn.cursor() as cur:
-        cur.execute("CREATE TABLE IF NOT EXISTS embedding_meta (model TEXT NOT NULL)")
         cur.execute("SELECT model FROM embedding_meta LIMIT 1")
         row = cur.fetchone()
         if row and row[0] == MODEL_NAME:
@@ -108,7 +101,6 @@ def startup_event():
                 cur.execute("SELECT 1 FROM pg_extension WHERE extname='vector'")
                 if not cur.fetchone():
                     raise RuntimeError("pgvector extension is not installed")
-            ensure_schema(conn)
             reembed_if_model_changed(conn)
         logger.info("Database connection verified")
     except Exception as e:
