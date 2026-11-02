@@ -3,6 +3,10 @@
 RoboFriend is a full-stack AI chat app that talks like a friend, remembers your life, and keeps your
 reminders and lists. Chat in Greek or English, by text or voice.
 
+## Demo
+
+https://github.com/user-attachments/assets/1f5f3eb1-01d7-4df6-9432-7f546a30ce33
+
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-6DB33F?logo=springboot&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
