@@ -1,5 +1,6 @@
 package com.bot.botback.service;
 
+import com.bot.botback.config.GroqProperties;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class AiServiceTest {
                 .thenReturn(List.of());
 
         AiService service = new AiService(memoryService,
-                new GroqClient("", "test-model"),
+                new GroqClient(new GroqProperties("", "test-model")),
                 new PromptBuilder(memoryService, reminderRepo, chatRepo, listService),
                 new ReplyExtraction(memoryService, reminderRepo, listService),
                 reminderRepo);

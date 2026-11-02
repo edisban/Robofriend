@@ -1,6 +1,7 @@
 package com.bot.botback.controller;
 
 import com.bot.botback.config.AuthProperties;
+import com.bot.botback.config.CorsProperties;
 import com.bot.botback.config.PasswordEncoderConfig;
 import com.bot.botback.config.StreamingConfig;
 import com.bot.botback.config.WebConfig;
@@ -59,7 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = {ChatController.class, ReminderController.class, AuthController.class})
 @Import({SecurityConfig.class, WebConfig.class, PasswordEncoderConfig.class, StreamingConfig.class,
         JwtUtil.class, CurrentUser.class, LoginRateLimiter.class, AuthCookies.class})
-@EnableConfigurationProperties(AuthProperties.class)
+@EnableConfigurationProperties({AuthProperties.class, CorsProperties.class})
 @TestPropertySource(properties = {
         "app.auth.jwt-secret=test-secret-0123456789-abcdefghijklmnop",
         "app.auth.secure-cookies=true",

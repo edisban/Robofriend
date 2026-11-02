@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -19,6 +18,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.bot.botback.config.MemoryServiceProperties;
 import com.bot.botback.model.MemoryVault;
 import com.bot.botback.repository.MemoryVaultRepository;
 
@@ -33,15 +33,13 @@ public class MemoryService {
     private final ObjectMapper objectMapper;
     private final MemoryVaultRepository memoryVaultRepository;
 
-    public MemoryService(@Value("${memory.service.url}") String memoryServiceUrl,
-                         @Value("${memory.service.token}") String serviceToken,
-                         MemoryVaultRepository memoryVaultRepository) {
-        this.memoryServiceUrl = memoryServiceUrl;
-        this.serviceToken = serviceToken;
+    public MemoryService(MemoryServiceProperties properties, MemoryVaultRepository memoryVaultRepository) {
+        this.memoryServiceUrl = properties.url();
+        this.serviceToken = properties.token();
         this.memoryVaultRepository = memoryVaultRepository;
         this.objectMapper = new ObjectMapper();
         this.restClient = RestClient.builder()
-                .baseUrl(memoryServiceUrl)
+                .baseUrl(properties.url())
                 .requestFactory(requestFactory())
                 .build();
     }

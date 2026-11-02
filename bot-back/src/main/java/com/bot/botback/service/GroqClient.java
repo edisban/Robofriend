@@ -1,11 +1,11 @@
 package com.bot.botback.service;
 
+import com.bot.botback.config.GroqProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -34,13 +34,14 @@ public class GroqClient {
 
     private final String apiKey;
     private final String modelName;
+    private final boolean configured;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    public GroqClient(@Value("${groq.api.key:}") String apiKey,
-                      @Value("${groq.api.model:openai/gpt-oss-120b}") String modelName) {
-        this.apiKey = apiKey;
-        this.modelName = modelName;
+    public GroqClient(GroqProperties properties) {
+        this.apiKey = properties.key();
+        this.modelName = properties.model();
+        this.configured = properties.configured();
         this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         this.objectMapper = new ObjectMapper();
     }
@@ -54,7 +55,7 @@ public class GroqClient {
     }
 
     public boolean isConfigured() {
-        return apiKey != null && !apiKey.isBlank();
+        return configured;
     }
 
     /** One complete answer for a self-contained prompt (nothing streamed to a client). */
