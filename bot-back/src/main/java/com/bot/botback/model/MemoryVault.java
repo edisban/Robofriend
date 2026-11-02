@@ -32,6 +32,10 @@ public class MemoryVault {
     @Column(columnDefinition = "TEXT")
     private String embedding;
 
+    /** Set for facts that change over time (e.g. "squat_max"); a newer fact with the same key replaces it. */
+    @Column(name = "fact_key", length = 80)
+    private String factKey;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 

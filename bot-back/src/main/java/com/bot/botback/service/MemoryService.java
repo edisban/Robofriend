@@ -12,9 +12,15 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.bot.botback.model.MemoryVault;
+import com.bot.botback.repository.MemoryVaultRepository;
 
 @Service
 public class MemoryService {
@@ -25,11 +31,14 @@ public class MemoryService {
     private final String serviceToken;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final MemoryVaultRepository memoryVaultRepository;
 
     public MemoryService(@Value("${memory.service.url}") String memoryServiceUrl,
-                         @Value("${memory.service.token}") String serviceToken) {
+                         @Value("${memory.service.token}") String serviceToken,
+                         MemoryVaultRepository memoryVaultRepository) {
         this.memoryServiceUrl = memoryServiceUrl;
         this.serviceToken = serviceToken;
+        this.memoryVaultRepository = memoryVaultRepository;
         this.objectMapper = new ObjectMapper();
         this.restClient = RestClient.builder()
                 .baseUrl(memoryServiceUrl)
@@ -45,7 +54,43 @@ public class MemoryService {
         return factory;
     }
 
+    /** A remembered fact plus when it was saved, so relative words like "tomorrow" can be dated. */
+    public record Memory(String fact, OffsetDateTime savedAt) {
+    }
+
+    /** Facts that hold a current value (personal records, job, city...), one per key. */
+    public List<Memory> profileFacts(Long userId) {
+        try {
+            return memoryVaultRepository.findByUserIdAndFactKeyIsNotNullOrderByFactKeyAsc(userId).stream()
+                    .map(MemoryService::toMemory)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Profile lookup failed for user {}: {}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Most recent memories, newest first; used for the daily check-in. */
+    public List<Memory> recentMemories(Long userId) {
+        try {
+            return memoryVaultRepository.findTop150ByUserIdOrderByCreatedAtDesc(userId).stream()
+                    .map(MemoryService::toMemory)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Recent memory lookup failed for user {}: {}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    private static Memory toMemory(MemoryVault row) {
+        return new Memory(row.getFact(), row.getCreatedAt());
+    }
+
     public List<String> searchFacts(Long userId, String query, int limit) {
+        return searchMemories(userId, query, limit).stream().map(m -> m.fact()).toList();
+    }
+
+    public List<Memory> searchMemories(Long userId, String query, int limit) {
         try {
             Map<String, Object> payload = Map.of(
                     "query", query == null ? "" : query,
@@ -65,21 +110,41 @@ public class MemoryService {
             }
 
             JsonNode root = objectMapper.readTree(response);
-            List<String> facts = new ArrayList<>();
+            List<Memory> memories = new ArrayList<>();
             for (JsonNode node : root) {
                 JsonNode fact = node.get("fact");
                 if (fact != null && !fact.asText().isBlank()) {
-                    facts.add(fact.asText());
+                    memories.add(new Memory(fact.asText(), parseTimestamp(node.path("created_at").asText(null))));
                 }
             }
-            return facts;
+            return memories;
         } catch (Exception e) {
             log.warn("Memory search failed for user {}: {}", userId, e.getMessage());
             return List.of();
         }
     }
 
+    private static OffsetDateTime parseTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value);
+        } catch (DateTimeParseException e) {
+            try {
+                // Python may omit the offset; the database stores UTC.
+                return LocalDateTime.parse(value).atOffset(ZoneOffset.UTC);
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        }
+    }
+
     public void ingestFact(Long userId, String fact, String category) {
+        ingestFact(userId, fact, category, null);
+    }
+
+    public void ingestFact(Long userId, String fact, String category, String key) {
         if (fact == null || fact.isBlank()) {
             return;
         }
@@ -88,6 +153,7 @@ public class MemoryService {
                     .queryParam("user_id", userId)
                     .queryParam("message", fact)
                     .queryParam("category", category == null ? "General" : category)
+                    .queryParamIfPresent("key", java.util.Optional.ofNullable(key))
                     .build()
                     .encode()
                     .toUri();

@@ -1,5 +1,6 @@
 package com.bot.botback.service;
 
+import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -15,10 +16,13 @@ class AiServiceTest {
     void fallbackReplyWhenApiKeyMissing() {
         MemoryService memoryService = Mockito.mock(MemoryService.class);
         ReminderRepository reminderRepo = Mockito.mock(ReminderRepository.class);
-        Mockito.when(memoryService.searchFacts(Mockito.anyLong(), Mockito.anyString(), Mockito.anyInt()))
+        Mockito.when(memoryService.searchMemories(Mockito.anyLong(), Mockito.anyString(), Mockito.anyInt()))
                 .thenReturn(List.of());
 
-        AiService service = new AiService(memoryService, reminderRepo);
+        ChatMessageRepository chatRepo = Mockito.mock(ChatMessageRepository.class);
+
+        AiService service = new AiService(memoryService, reminderRepo, chatRepo,
+                Mockito.mock(ListService.class));
         ReflectionTestUtils.setField(service, "apiKey", "");
 
         String reply = service.generateReply(1L, "Hello there");

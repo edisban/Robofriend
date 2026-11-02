@@ -10,4 +10,5 @@ public interface ReminderRepository extends JpaRepository<Reminder, Long> {
     List<Reminder> findByUserIdOrderByScheduledAtAsc(Long userId);
     List<Reminder> findByUserIdAndStatusAndScheduledAtBeforeOrderByScheduledAtAsc(Long userId, String status, OffsetDateTime now);
     List<Reminder> findByUserIdAndStatusAndScheduledAtAfterOrderByScheduledAtAsc(Long userId, String status, OffsetDateTime now);
+    List<Reminder> findByStatusAndScheduledAtBeforeOrderByScheduledAtAsc(String status, OffsetDateTime now);
 }

@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
@@ -31,6 +32,10 @@ public class User {
 
     @Column(nullable = false, length = 20)
     private String role = "USER";
+
+    /** The user's local date of the last daily check-in, so RoboFriend reaches out at most once a day. */
+    @Column(name = "last_checkin_on")
+    private LocalDate lastCheckinOn;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
