@@ -199,6 +199,11 @@ class ApiSecurityTest {
     }
 
     @Test
+    void unknownPathsAre404NotServerErrors() throws Exception {
+        mvc.perform(get("/api/does-not-exist").cookie(eleniSession)).andExpect(status().isNotFound());
+    }
+
+    @Test
     void corsAllowsTheConfiguredFrontendOnly() throws Exception {
         mvc.perform(options("/api/chat/stream")
                         .header(HttpHeaders.ORIGIN, "http://localhost:5173")
