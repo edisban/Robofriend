@@ -1,115 +1,111 @@
-# RoboFriend - Production-Ready Full-Stack AI Companion
+# RoboFriend — an AI companion that remembers
 
-RoboFriend is a full-stack AI companion combining conversational chat, long-term semantic memory, and natural-language reminders. It pairs a Spring Boot backend with a React frontend, backed by PostgreSQL + pgvector, with a Python ML microservice for sentence embeddings, and powered by the Groq API.
+RoboFriend is a full-stack AI chat app that talks like a friend, remembers your life, and keeps your
+reminders and lists. Chat in Greek or English, by text or voice.
 
-## Tech Stack
+![Java](https://img.shields.io/badge/Java-17-orange)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-6DB33F?logo=springboot&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16_+_pgvector-4169E1?logo=postgresql&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-embeddings-009688?logo=fastapi&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?logo=springboot&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
-![pgvector](https://img.shields.io/badge/pgvector-enabled-336791)
-![Groq API](https://img.shields.io/badge/Groq_API-LLM-4285F4?logo=google&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-Python_ML-009688?logo=fastapi&logoColor=white)
+## Features
 
-## Key Features
-
-- Context-aware AI chat with long-term memory retrieval via pgvector embeddings and the Groq API.
-- Smart reminders system with local natural-language parsing (no LLM round-trip for scheduling).
-- Voice conversation & speech-to-text: real-time hands-free voice interaction and speech recognition.
-- Interactive audio visualizer UI: animated dynamic sound wave / waveform overlay visualizing active voice listening and AI response playback.
-- Glassmorphism chat UI that feels like messaging a friend: grouped bubbles, typing indicator, quick replies, light/dark themes, mobile reminders drawer.
-- Containerized full stack via Docker Compose (Postgres, backend, frontend, memory service).
-- Per-user data isolation: every endpoint resolves the user from the JWT, never from the request.
+- **Streaming chat** — replies appear word by word (Server-Sent Events), with regenerate, edit and delete.
+- **Memory** — remembers facts with the date it learned them (semantic search with pgvector); stats like
+  "squat max" are kept up to date instead of duplicated.
+- **Reminders** — "remind me tomorrow at 9 to call mom" becomes a reminder in your timezone; when it's due,
+  RoboFriend sends you a chat message.
+- **Lists** — "add milk and eggs to my shopping list", then "what's on my list?"; also to-do, uni, work lists.
+- **Daily check-in** — the first time you open the app each day, RoboFriend messages you if something
+  matters today (an exam, a birthday, a follow-up).
+- **Voice mode** — speak and listen, with an animated Siri-style wave.
+- **Greek and English** — replies in the language of each message.
+- **Glassmorphism UI** — animated intro, light/dark themes, mobile layout.
 
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│  React SPA  │────▶│ Spring Boot  │────▶│  PostgreSQL +    │
-│  (Vite/TS)  │     │   Backend    │     │     pgvector     │
-└─────────────┘     └──────┬───────┘     └────────┬─────────┘
-                           │                      │
-                           ▼                      ▼
-                    ┌──────────────┐     ┌──────────────────┐
-                    │  Groq API  │     │ Python ML Service│
-                    │  (LLM/Chat)  │     │ (sentence-transf)│
-                    └──────────────┘     └──────────────────┘
+Browser (React)  →  nginx  →  Spring Boot API  →  Groq API (LLM, streamed)
+                                     │       →  Memory service (Python, embeddings)
+                                     ↓                    ↓
+                              PostgreSQL + pgvector  ←────┘
 ```
 
-- **Backend**: Java 17, Spring Boot, Spring Data JPA, Lombok, PostgreSQL + pgvector.
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS / MUI, with an interactive voice overlay (audio visualizer).
-- **AI & ML Integration**: Groq API for LLM responses; Python FastAPI service (`paraphrase-multilingual-MiniLM-L12-v2` via sentence-transformers, so Greek works too) generates 384-dim embeddings stored in pgvector for semantic memory search.
-- **Python ML Service**: FastAPI app exposing `/embed`, `/search`, `/ingest`, `/health`. Uses `sentence-transformers` model `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions) and `pgvector` for cosine-similarity search over `memory_vault`.
+| Part | Tech | Role |
+| --- | --- | --- |
+| `bot-front/` | React 19, TypeScript, Vite, MUI | The app; served by nginx, which also proxies `/api` |
+| `bot-back/` | Spring Boot 4, Java 17, Spring Security, JPA, Flyway | API, auth, prompt building, streaming, reminders |
+| `ai-memory-service/` | Python, FastAPI, sentence-transformers | Turns text into 384-dim embeddings; semantic search |
+| PostgreSQL | 16 + pgvector | All data; vector similarity search |
 
-## Getting Started
+How a message flows: the browser sends it to `POST /api/chat/stream`; the backend loads related memories,
+stats, reminders, lists and recent messages, builds one prompt and streams Groq's answer back as SSE.
+The model's output ends with a hidden JSON part (after `###META###`) listing facts to remember, a reminder
+and list changes, which the backend saves.
 
-### Prerequisites
+## Run it
 
-- Java 17
-- Node.js 18+
-- Python 3.10+ (for memory service)
-- Docker & Docker Compose
+Requirements: Docker with Docker Compose, and a [Groq](https://console.groq.com) API key.
 
-### Environment Setup
+1. Create `.env` in the project root (see `.env.example`):
 
-Create a `.env` file in the project root:
+   ```
+   GROQ_API_KEY=your_groq_api_key
+   JWT_SECRET=<output of: openssl rand -base64 48>
+   MEMORY_SERVICE_TOKEN=any-shared-secret
+   ```
+
+2. Start everything:
+
+   ```
+   docker compose up -d --build
+   ```
+
+3. Open **http://localhost:8081**.
+
+The backend API is also reachable at `http://localhost:8080` and PostgreSQL at `localhost:5434`.
+
+### Frontend development
+
+With the Docker stack running, `cd bot-front && npm install && npm run dev` serves the app with hot reload
+on http://localhost:5174; it proxies `/api` to the backend on port 8080.
+
+## Security
+
+- Passwords hashed with BCrypt; sign-up requires 8–72 characters; failed logins are rate-limited.
+- Sessions live in **HttpOnly, Secure, SameSite=Strict cookies**, so page scripts never see a token:
+  - `rf_access`: a JWT valid for 15 minutes
+  - `rf_refresh`: a random token valid for 30 days, stored hashed, **rotated on every use**; reusing an old one
+    ends all of that user's sessions
+- CSRF protection on every state-changing request (`XSRF-TOKEN` cookie echoed as `X-XSRF-TOKEN`).
+- Every endpoint takes the user from the session, never from the request, so users can't see each other's data.
+- The backend refuses to start without a strong `JWT_SECRET`.
+- Personal content is never written to the INFO logs.
+
+## Database
+
+Flyway migrations in `bot-back/src/main/resources/db/migration` create and change the schema; Hibernate only
+validates it.
+
+| Table | Holds |
+| --- | --- |
+| `users` | accounts (BCrypt password hashes) |
+| `chat_messages` | the conversation |
+| `memory_vault` | remembered facts with their embeddings and the date learned |
+| `reminders` | reminders (PENDING → SENT → DONE) |
+| `list_items` | shopping / to-do / other list entries |
+| `refresh_tokens` | sign-in sessions (hashed tokens) |
+
+## Tests
 
 ```
-GROQ_API_KEY=your_groq_api_key
-JWT_SECRET=change-me-in-production-32-chars-min!
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5434/botdb
-SPRING_DATASOURCE_USERNAME=botuser
-SPRING_DATASOURCE_PASSWORD=botpass
-MEMORY_SERVICE_TOKEN=local-dev-token
+cd bot-back && ./mvnw test
 ```
 
-### Run with Docker Compose
+Unit tests, web-layer security tests (`@WebMvcTest`) and integration tests against a real PostgreSQL in
+Docker (Testcontainers; skipped when Docker isn't running). CI runs them on every push, then lints and
+builds the frontend.
 
-```
-docker compose up --build
-```
-
-Frontend: `http://localhost:8081/` — Backend API: `http://localhost:8080` — Memory service: `http://localhost:8000`.
-
-### Run Locally
-
-Backend:
-```
-cd bot-back
-./mvnw spring-boot:run
-```
-
-Frontend:
-```
-cd bot-front
-npm install
-npm run dev
-```
-
-Memory service:
-```
-cd ai-memory-service
-pip install -r requirements.txt
-uvicorn main:app --port 8000
-```
-
-## Authentication
-
-- Passwords are hashed with BCrypt; sign-up requires 8-72 characters. Failed logins are rate-limited.
-- The session lives in two **HttpOnly, Secure, SameSite=Strict cookies**, so page scripts never see a token:
-  - `rf_access`: a JWT valid for 15 minutes, sent with every API call
-  - `rf_refresh`: a random token valid for 30 days, only sent to `/api/auth`, stored hashed in the database and **rotated on every use**; reusing an old one (a stolen copy) ends all of that user's sessions
-- The app renews the access cookie automatically (`POST /api/auth/refresh`) and asks `GET /api/auth/me` who is signed in. `POST /api/auth/logout` revokes the session.
-- State-changing requests carry a CSRF token (`XSRF-TOKEN` cookie echoed as `X-XSRF-TOKEN`).
-- `JWT_SECRET` is required (at least 32 characters); generate one with `openssl rand -base64 48`.
-
-## API & Database Structure
-
-Entities:
-
-- `User` — account identity (username, password hash).
-- `ChatMessage` — conversation history (user/bot messages per user).
-- `MemoryVault` — long-term memory facts with vector embeddings.
-- `Reminder` — scheduled reminders with status (PENDING/DONE).
-
-Health check: `GET /actuator/health` (includes the database). Memory service health: `GET /health`.
+Health check: `GET /actuator/health` (includes the database).
