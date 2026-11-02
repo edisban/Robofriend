@@ -68,6 +68,7 @@ export default function AuthScreen({
               fullWidth
               autoComplete="username"
               autoFocus
+              helperText={authMode === "register" ? "3-30 letters, numbers or _ . -" : undefined}
               slotProps={{
                 input: {
                   startAdornment: (
@@ -88,6 +89,7 @@ export default function AuthScreen({
               autoComplete={
                 authMode === "login" ? "current-password" : "new-password"
               }
+              helperText={authMode === "register" ? "At least 8 characters" : undefined}
               slotProps={{
                 input: {
                   startAdornment: (

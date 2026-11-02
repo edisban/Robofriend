@@ -1,8 +1,10 @@
 package com.bot.botback.controller;
 
+import com.bot.botback.dto.ReminderStatusRequest;
 import com.bot.botback.model.Reminder;
 import com.bot.botback.repository.ReminderRepository;
 import com.bot.botback.security.CurrentUser;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -44,16 +46,12 @@ public class ReminderController {
 
     @PatchMapping("/{reminderId}")
     public ResponseEntity<Map<String, String>> updateStatus(@PathVariable Long reminderId,
-                                                           @RequestBody Map<String, String> body) {
+                                                           @Valid @RequestBody ReminderStatusRequest body) {
         Reminder reminder = findOwned(reminderId);
         if (reminder == null) {
             return ResponseEntity.notFound().build();
         }
-        String status = body == null ? null : body.get("status");
-        if (status == null || !status.matches("(?i)PENDING|SENT|DONE")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid reminder status."));
-        }
-        reminder.setStatus(status.toUpperCase());
+        reminder.setStatus(body.getStatus().toUpperCase());
         reminderRepository.save(reminder);
         return ResponseEntity.ok(Map.of("status", reminder.getStatus()));
     }

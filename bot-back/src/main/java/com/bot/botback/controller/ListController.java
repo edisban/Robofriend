@@ -1,8 +1,10 @@
 package com.bot.botback.controller;
 
+import com.bot.botback.dto.ListItemDoneRequest;
 import com.bot.botback.model.ListItem;
 import com.bot.botback.repository.ListItemRepository;
 import com.bot.botback.security.CurrentUser;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,9 +40,9 @@ public class ListController {
     }
 
     @PatchMapping("/items/{itemId}")
-    public ListItem setDone(@PathVariable Long itemId, @RequestBody Map<String, Boolean> body) {
+    public ListItem setDone(@PathVariable Long itemId, @Valid @RequestBody ListItemDoneRequest body) {
         ListItem item = owned(itemId);
-        boolean done = Boolean.TRUE.equals(body == null ? null : body.get("done"));
+        boolean done = body.getDone();
         item.setDone(done);
         item.setDoneAt(done ? OffsetDateTime.now(ZoneOffset.UTC) : null);
         return repository.save(item);

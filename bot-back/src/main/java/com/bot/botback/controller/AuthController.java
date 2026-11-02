@@ -1,11 +1,13 @@
 package com.bot.botback.controller;
 
 import com.bot.botback.dto.LoginRequest;
+import com.bot.botback.dto.RegisterRequest;
 import com.bot.botback.model.User;
 import com.bot.botback.repository.UserRepository;
 import com.bot.botback.security.LoginRateLimiter;
 import com.bot.botback.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,7 +38,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@RequestBody LoginRequest req, HttpServletRequest http) {
+    public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody RegisterRequest req, HttpServletRequest http) {
         String ip = clientIp(http);
         Optional<Duration> blocked = rateLimiter.registerBlockedFor(ip);
         if (blocked.isPresent()) {
@@ -44,9 +46,6 @@ public class AuthController {
         }
         String username = req.getUsername();
         String password = req.getPassword();
-        if (username == null || username.isBlank() || password == null || password.isBlank()) {
-            return error(HttpStatus.BAD_REQUEST, "Please enter a username and password.");
-        }
         if (userRepository.findByUsername(username).isPresent()) {
             return error(HttpStatus.CONFLICT, "That username is taken.");
         }
@@ -59,15 +58,15 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@RequestBody LoginRequest req, HttpServletRequest http) {
+    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest req, HttpServletRequest http) {
         String ip = clientIp(http);
         String username = req.getUsername();
         Optional<Duration> blocked = rateLimiter.loginBlockedFor(ip, username);
         if (blocked.isPresent()) {
             return tooManyAttempts(blocked.get());
         }
-        Optional<User> user = userRepository.findByUsername(username == null ? "" : username)
-                .filter(u -> req.getPassword() != null && passwordEncoder.matches(req.getPassword(), u.getPasswordHash()));
+        Optional<User> user = userRepository.findByUsername(username)
+                .filter(u -> passwordEncoder.matches(req.getPassword(), u.getPasswordHash()));
         if (user.isEmpty()) {
             rateLimiter.recordFailedLogin(ip, username);
             return error(HttpStatus.UNAUTHORIZED, "Wrong username or password.");

@@ -8,6 +8,7 @@ import com.bot.botback.security.CurrentUser;
 import com.bot.botback.service.AiService;
 import com.bot.botback.service.CheckInService;
 import jakarta.annotation.PreDestroy;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -73,7 +74,7 @@ public class ChatController {
     }
 
     @PostMapping("/send")
-    public Map<String, String> sendMessage(@RequestBody MessageRequest req) {
+    public Map<String, String> sendMessage(@Valid @RequestBody MessageRequest req) {
         if (req == null || req.getMessage() == null || req.getMessage().isBlank()) {
             return Map.of("reply", "Please provide a message to continue.");
         }
@@ -101,7 +102,7 @@ public class ChatController {
      * </ul>
      */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@RequestBody MessageRequest req) {
+    public SseEmitter stream(@Valid @RequestBody MessageRequest req) {
         Long userId = currentUser.id();
         ZoneId zone = zoneOf(req.getTimeZone());
 
@@ -156,7 +157,7 @@ public class ChatController {
 
     /** Called when the app opens: RoboFriend's first message of the day, if it has something to say. */
     @PostMapping("/checkin")
-    public ResponseEntity<ChatMessage> checkIn(@RequestBody(required = false) MessageRequest req) {
+    public ResponseEntity<ChatMessage> checkIn(@Valid @RequestBody(required = false) MessageRequest req) {
         ZoneId zone = zoneOf(req == null ? null : req.getTimeZone());
         return checkInService.checkIn(currentUser.id(), zone)
                 .map(message -> ResponseEntity.ok(message))
