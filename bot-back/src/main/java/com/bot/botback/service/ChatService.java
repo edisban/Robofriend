@@ -2,6 +2,7 @@ package com.bot.botback.service;
 
 import com.bot.botback.dto.MessageRequest;
 import com.bot.botback.model.ChatMessage;
+import com.bot.botback.model.Sender;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.MemoryVaultRepository;
 import org.slf4j.Logger;
@@ -57,7 +58,7 @@ public class ChatService {
     public Turn startTurn(Long userId, MessageRequest req) {
         if (req.isRegenerate()) {
             ChatMessage lastUserMessage = chatRepo.findTop13ByUserIdOrderByCreatedAtDesc(userId).stream()
-                    .filter(m -> "USER".equals(m.getSender()))
+                    .filter(m -> m.getSender() == Sender.USER)
                     .findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nothing to regenerate"));
             chatRepo.deleteFrom(userId, lastUserMessage.getId() + 1);
@@ -68,17 +69,17 @@ public class ChatService {
         }
         if (req.getReplaceFromId() != null) {
             ChatMessage edited = owned(userId, req.getReplaceFromId());
-            if (!"USER".equals(edited.getSender())) {
+            if (edited.getSender() != Sender.USER) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only your own messages can be edited");
             }
             chatRepo.deleteFrom(userId, edited.getId());
         }
-        ChatMessage saved = save(userId, "USER", req.getMessage());
+        ChatMessage saved = save(userId, Sender.USER, req.getMessage());
         return new Turn(req.getMessage(), saved.getId(), true);
     }
 
     @Transactional
-    public ChatMessage save(Long userId, String sender, String content) {
+    public ChatMessage save(Long userId, Sender sender, String content) {
         ChatMessage message = new ChatMessage();
         message.setUserId(userId);
         message.setSender(sender);

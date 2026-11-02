@@ -1,6 +1,7 @@
 package com.bot.botback.service;
 
 import com.bot.botback.model.Reminder;
+import com.bot.botback.model.ReminderStatus;
 import com.bot.botback.repository.ReminderRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -149,7 +150,7 @@ public class ReplyExtraction {
             entity.setUserId(userId);
             entity.setTitle(reminder.title());
             entity.setScheduledAt(scheduledAt);
-            entity.setStatus("PENDING");
+            entity.setStatus(ReminderStatus.PENDING);
             entity.setNotes("Auto-extracted from conversation");
             reminderRepository.save(entity);
             log.info("Saved reminder for user {}: {} at {}", userId, reminder.title(), scheduledAt);

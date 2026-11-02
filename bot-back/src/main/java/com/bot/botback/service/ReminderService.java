@@ -1,6 +1,7 @@
 package com.bot.botback.service;
 
 import com.bot.botback.model.Reminder;
+import com.bot.botback.model.ReminderStatus;
 import com.bot.botback.repository.ReminderRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,7 @@ public class ReminderService {
     @Transactional
     public Reminder updateStatus(Long userId, Long reminderId, String status) {
         Reminder reminder = owned(userId, reminderId);
-        reminder.setStatus(status.toUpperCase(Locale.ROOT));
+        reminder.setStatus(ReminderStatus.valueOf(status.toUpperCase(Locale.ROOT)));
         return reminderRepository.save(reminder);
     }
 

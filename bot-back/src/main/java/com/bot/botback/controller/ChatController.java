@@ -4,6 +4,7 @@ import com.bot.botback.config.StreamingConfig;
 import com.bot.botback.dto.ChatMessageResponse;
 import com.bot.botback.dto.MessageRequest;
 import com.bot.botback.model.ChatMessage;
+import com.bot.botback.model.Sender;
 import com.bot.botback.security.CurrentUser;
 import com.bot.botback.service.AiService;
 import com.bot.botback.service.ChatService;
@@ -74,14 +75,14 @@ public class ChatController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is empty");
         }
         Long userId = currentUser.id();
-        chatService.save(userId, "USER", req.getMessage());
+        chatService.save(userId, Sender.USER, req.getMessage());
         String reply;
         try {
             reply = aiService.generateReply(userId, req.getMessage(), zoneOf(req.getTimeZone()));
         } catch (Exception ex) {
             reply = CONNECTION_TROUBLE;
         }
-        chatService.save(userId, "BOT", reply);
+        chatService.save(userId, Sender.BOT, reply);
         return Map.of("reply", reply);
     }
 
@@ -119,7 +120,7 @@ public class ChatController {
             channel.send("token", Map.of("t", reply));
         }
         // Saved even if the user closed the tab mid-stream, so it's there next time.
-        ChatMessage saved = chatService.save(userId, "BOT", reply);
+        ChatMessage saved = chatService.save(userId, Sender.BOT, reply);
 
         Map<String, Object> done = new HashMap<>();
         done.put("reply", reply);

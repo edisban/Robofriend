@@ -40,7 +40,7 @@ public class ReminderController {
     @PatchMapping("/{reminderId}")
     public Map<String, String> updateStatus(@PathVariable Long reminderId,
                                             @Valid @RequestBody ReminderStatusRequest body) {
-        String status = reminderService.updateStatus(currentUser.id(), reminderId, body.getStatus()).getStatus();
+        String status = reminderService.updateStatus(currentUser.id(), reminderId, body.getStatus()).getStatus().name();
         return Map.of("status", status);
     }
 

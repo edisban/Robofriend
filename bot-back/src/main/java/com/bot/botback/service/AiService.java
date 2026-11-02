@@ -1,6 +1,7 @@
 package com.bot.botback.service;
 
 import com.bot.botback.model.Reminder;
+import com.bot.botback.model.ReminderStatus;
 import com.bot.botback.repository.ReminderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -158,7 +159,7 @@ public class AiService {
             entity.setUserId(userId);
             entity.setTitle(parsed.title());
             entity.setScheduledAt(parsed.scheduledAt().atOffset(ZoneOffset.UTC));
-            entity.setStatus("PENDING");
+            entity.setStatus(ReminderStatus.PENDING);
             entity.setNotes("Auto-extracted locally (AI provider unavailable)");
             reminderRepository.save(entity);
             log.info("Saved local reminder for user {}: {} at {}", userId, parsed.title(), parsed.scheduledAt());

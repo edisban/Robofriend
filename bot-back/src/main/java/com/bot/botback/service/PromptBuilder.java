@@ -2,6 +2,8 @@ package com.bot.botback.service;
 
 import com.bot.botback.model.ChatMessage;
 import com.bot.botback.model.Reminder;
+import com.bot.botback.model.ReminderStatus;
+import com.bot.botback.model.Sender;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
 import org.slf4j.Logger;
@@ -66,7 +68,7 @@ public class PromptBuilder {
 
         List<Reminder> upcomingReminders = reminderRepository
                 .findByUserIdAndStatusAndScheduledAtAfterOrderByScheduledAtAsc(
-                        userId, "PENDING", OffsetDateTime.now(ZoneOffset.UTC));
+                        userId, ReminderStatus.PENDING, OffsetDateTime.now(ZoneOffset.UTC));
         String remindersContext = upcomingReminders.isEmpty()
                 ? "None"
                 : upcomingReminders.stream()
@@ -186,7 +188,7 @@ public class PromptBuilder {
             List<ChatMessage> recent = new ArrayList<>(
                     chatMessageRepository.findTop13ByUserIdOrderByCreatedAtDesc(userId));
             if (!recent.isEmpty()
-                    && "USER".equals(recent.get(0).getSender())
+                    && recent.get(0).getSender() == Sender.USER
                     && currentMessage.equals(recent.get(0).getContent())) {
                 recent.remove(0);
             }
@@ -198,7 +200,7 @@ public class PromptBuilder {
             }
             Collections.reverse(recent);
             return recent.stream()
-                    .map(m -> ("USER".equals(m.getSender()) ? "Them: " : "You: ") + m.getContent())
+                    .map(m -> (m.getSender() == Sender.USER ? "Them: " : "You: ") + m.getContent())
                     .collect(Collectors.joining("\n"));
         } catch (Exception e) {
             log.warn("Chat history lookup failed for user {}: {}", userId, e.getMessage());

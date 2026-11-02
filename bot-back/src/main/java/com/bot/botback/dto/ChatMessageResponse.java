@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 public record ChatMessageResponse(Long id, String sender, String content, OffsetDateTime createdAt) {
 
     public static ChatMessageResponse from(ChatMessage message) {
-        return new ChatMessageResponse(message.getId(), message.getSender(), message.getContent(),
+        return new ChatMessageResponse(message.getId(), message.getSender().name(), message.getContent(),
                 message.getCreatedAt());
     }
 }

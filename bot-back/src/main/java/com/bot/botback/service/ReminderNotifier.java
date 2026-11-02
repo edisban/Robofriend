@@ -2,6 +2,8 @@ package com.bot.botback.service;
 
 import com.bot.botback.model.ChatMessage;
 import com.bot.botback.model.Reminder;
+import com.bot.botback.model.ReminderStatus;
+import com.bot.botback.model.Sender;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
 import org.slf4j.Logger;
@@ -39,7 +41,7 @@ public class ReminderNotifier {
         List<Reminder> due;
         try {
             due = reminderRepository.findByStatusAndScheduledAtBeforeOrderByScheduledAtAsc(
-                    "PENDING", OffsetDateTime.now(ZoneOffset.UTC));
+                    ReminderStatus.PENDING, OffsetDateTime.now(ZoneOffset.UTC));
         } catch (Exception e) {
             log.warn("Could not look up due reminders: {}", e.getMessage());
             return;
@@ -48,12 +50,12 @@ public class ReminderNotifier {
         for (Reminder reminder : due) {
             try {
                 // Mark first so a slow nudge can't make the next run deliver it twice.
-                reminder.setStatus("SENT");
+                reminder.setStatus(ReminderStatus.SENT);
                 reminderRepository.save(reminder);
 
                 ChatMessage message = new ChatMessage();
                 message.setUserId(reminder.getUserId());
-                message.setSender("BOT");
+                message.setSender(Sender.BOT);
                 message.setContent(aiService.reminderNudge(reminder.getTitle()));
                 chatMessageRepository.save(message);
                 log.info("Delivered reminder {} to user {}", reminder.getId(), reminder.getUserId());

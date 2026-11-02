@@ -2,6 +2,8 @@ package com.bot.botback.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -27,7 +29,8 @@ public class ChatMessage {
     private Long userId;
 
     @Column(nullable = false, length = 20)
-    private String sender;
+    @Enumerated(EnumType.STRING)
+    private Sender sender;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
@@ -38,7 +41,7 @@ public class ChatMessage {
     public ChatMessage() {
     }
 
-    public ChatMessage(Long id, Long userId, String sender, String content, OffsetDateTime createdAt) {
+    public ChatMessage(Long id, Long userId, Sender sender, String content, OffsetDateTime createdAt) {
         this.id = id;
         this.userId = userId;
         this.sender = sender;

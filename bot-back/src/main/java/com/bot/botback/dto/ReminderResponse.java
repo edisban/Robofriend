@@ -8,6 +8,6 @@ public record ReminderResponse(Long id, String title, OffsetDateTime scheduledAt
 
     public static ReminderResponse from(Reminder reminder) {
         return new ReminderResponse(reminder.getId(), reminder.getTitle(), reminder.getScheduledAt(),
-                reminder.getStatus(), reminder.getNotes());
+                reminder.getStatus() == null ? null : reminder.getStatus().name(), reminder.getNotes());
     }
 }

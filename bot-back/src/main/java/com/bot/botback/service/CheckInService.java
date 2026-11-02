@@ -2,6 +2,8 @@ package com.bot.botback.service;
 
 import com.bot.botback.model.ChatMessage;
 import com.bot.botback.model.Reminder;
+import com.bot.botback.model.ReminderStatus;
+import com.bot.botback.model.Sender;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
 import com.bot.botback.repository.UserRepository;
@@ -80,7 +82,7 @@ public class CheckInService {
 
         ChatMessage message = new ChatMessage();
         message.setUserId(userId);
-        message.setSender("BOT");
+        message.setSender(Sender.BOT);
         message.setContent(text);
         log.info("Daily check-in for user {}: {}", userId, text);
         return Optional.of(chatMessageRepository.save(message));
@@ -94,20 +96,20 @@ public class CheckInService {
         String lastTalked = recent.isEmpty()
                 ? "You have never talked before."
                 : "Their last message was " + ago(recent.stream()
-                        .filter(m -> "USER".equals(m.getSender()))
+                        .filter(m -> m.getSender() == Sender.USER)
                         .map(m -> m.getCreatedAt())
                         .findFirst().orElse(recent.get(0).getCreatedAt()), now) + ".";
         Collections.reverse(recent);
         String conversation = recent.isEmpty()
                 ? "(none)"
                 : recent.stream()
-                        .map(m -> ("USER".equals(m.getSender()) ? "Them: " : "You: ") + m.getContent())
+                        .map(m -> (m.getSender() == Sender.USER ? "Them: " : "You: ") + m.getContent())
                         .collect(Collectors.joining("\n"));
 
         OffsetDateTime dayStart = today.atStartOfDay(zone).toOffsetDateTime();
         OffsetDateTime dayAfterTomorrow = today.plusDays(2).atStartOfDay(zone).toOffsetDateTime();
         List<Reminder> soon = reminderRepository.findByUserIdOrderByScheduledAtAsc(userId).stream()
-                .filter(r -> !"DONE".equals(r.getStatus()))
+                .filter(r -> r.getStatus() != ReminderStatus.DONE)
                 .filter(r -> !r.getScheduledAt().isBefore(dayStart) && r.getScheduledAt().isBefore(dayAfterTomorrow))
                 .toList();
         String reminders = soon.isEmpty()

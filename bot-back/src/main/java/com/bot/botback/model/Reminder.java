@@ -2,6 +2,8 @@ package com.bot.botback.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -33,7 +35,8 @@ public class Reminder {
     private OffsetDateTime scheduledAt;
 
     @Column(length = 20)
-    private String status = "PENDING";
+    @Enumerated(EnumType.STRING)
+    private ReminderStatus status = ReminderStatus.PENDING;
 
     @Column(columnDefinition = "TEXT")
     private String notes;
@@ -44,12 +47,12 @@ public class Reminder {
     public Reminder() {
     }
 
-    public Reminder(Long id, Long userId, String title, OffsetDateTime scheduledAt, String status, String notes, OffsetDateTime createdAt) {
+    public Reminder(Long id, Long userId, String title, OffsetDateTime scheduledAt, ReminderStatus status, String notes, OffsetDateTime createdAt) {
         this.id = id;
         this.userId = userId;
         this.title = title;
         this.scheduledAt = scheduledAt;
-        this.status = status == null ? "PENDING" : status;
+        this.status = status == null ? ReminderStatus.PENDING : status;
         this.notes = notes;
         this.createdAt = createdAt;
     }
@@ -60,7 +63,7 @@ public class Reminder {
             createdAt = OffsetDateTime.now(ZoneOffset.UTC);
         }
         if (status == null) {
-            status = "PENDING";
+            status = ReminderStatus.PENDING;
         }
     }
 }
