@@ -52,6 +52,16 @@ BEGIN
         EXECUTE 'ALTER TABLE public.users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT ''USER''';
     END IF;
 
+    EXECUTE 'ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_checkin_on DATE';
+    EXECUTE 'ALTER TABLE public.memory_vault ADD COLUMN IF NOT EXISTS fact_key VARCHAR(80)';
+
+    -- list_items may have been created by Hibernate without the cascade to users.
+    IF to_regclass('public.list_items') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'list_items_user_id_fkey') THEN
+        EXECUTE 'DELETE FROM public.list_items l WHERE NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = l.user_id)';
+        EXECUTE 'ALTER TABLE public.list_items ADD CONSTRAINT list_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE';
+    END IF;
+
     SELECT data_type, udt_name
       INTO col_type, col_udt
       FROM information_schema.columns

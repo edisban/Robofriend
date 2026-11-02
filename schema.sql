@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
+    last_checkin_on DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS memory_vault (
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
     fact TEXT NOT NULL,
     category VARCHAR(50) DEFAULT 'General',
+    fact_key VARCHAR(80),
     embedding TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -38,3 +40,15 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reminders_user_schedule ON reminders(user_id, scheduled_at);
+
+CREATE TABLE IF NOT EXISTS list_items (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    list_name VARCHAR(60) NOT NULL,
+    text VARCHAR(300) NOT NULL,
+    done BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    done_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_list_items_user_list ON list_items(user_id, list_name);
