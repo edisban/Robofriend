@@ -1,5 +1,6 @@
 package com.bot.botback.controller;
 
+import com.bot.botback.dto.ChatMessageResponse;
 import com.bot.botback.dto.MessageRequest;
 import com.bot.botback.model.ChatMessage;
 import com.bot.botback.repository.ChatMessageRepository;
@@ -65,12 +66,13 @@ public class ChatController {
     }
 
     @GetMapping("/history/{userId}")
-    public List<ChatMessage> getHistory(@PathVariable Long userId,
-                                        @RequestParam(required = false) Long afterId) {
+    public List<ChatMessageResponse> getHistory(@PathVariable Long userId,
+                                                @RequestParam(required = false) Long afterId) {
         currentUser.requireSelf(userId);
-        return afterId == null
+        List<ChatMessage> messages = afterId == null
                 ? chatRepo.findByUserIdOrderByCreatedAtAsc(userId)
                 : chatRepo.findByUserIdAndIdGreaterThanOrderByCreatedAtAsc(userId, afterId);
+        return messages.stream().map(message -> ChatMessageResponse.from(message)).toList();
     }
 
     @PostMapping("/send")
@@ -157,10 +159,10 @@ public class ChatController {
 
     /** Called when the app opens: RoboFriend's first message of the day, if it has something to say. */
     @PostMapping("/checkin")
-    public ResponseEntity<ChatMessage> checkIn(@Valid @RequestBody(required = false) MessageRequest req) {
+    public ResponseEntity<ChatMessageResponse> checkIn(@Valid @RequestBody(required = false) MessageRequest req) {
         ZoneId zone = zoneOf(req == null ? null : req.getTimeZone());
         return checkInService.checkIn(currentUser.id(), zone)
-                .map(message -> ResponseEntity.ok(message))
+                .map(message -> ResponseEntity.ok(ChatMessageResponse.from(message)))
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 

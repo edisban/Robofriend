@@ -1,5 +1,6 @@
 package com.bot.botback.controller;
 
+import com.bot.botback.dto.ReminderResponse;
 import com.bot.botback.dto.ReminderStatusRequest;
 import com.bot.botback.model.Reminder;
 import com.bot.botback.repository.ReminderRepository;
@@ -39,9 +40,11 @@ public class ReminderController {
     }
 
     @GetMapping("/{userId}")
-    public List<Reminder> getReminders(@PathVariable Long userId) {
+    public List<ReminderResponse> getReminders(@PathVariable Long userId) {
         currentUser.requireSelf(userId);
-        return reminderRepository.findByUserIdOrderByScheduledAtAsc(userId);
+        return reminderRepository.findByUserIdOrderByScheduledAtAsc(userId).stream()
+                .map(reminder -> ReminderResponse.from(reminder))
+                .toList();
     }
 
     @PatchMapping("/{reminderId}")

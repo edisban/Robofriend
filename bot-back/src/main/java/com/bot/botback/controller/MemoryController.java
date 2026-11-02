@@ -1,6 +1,6 @@
 package com.bot.botback.controller;
 
-import com.bot.botback.model.MemoryVault;
+import com.bot.botback.dto.MemoryResponse;
 import com.bot.botback.repository.MemoryVaultRepository;
 import com.bot.botback.security.CurrentUser;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -25,8 +25,10 @@ public class MemoryController {
     }
 
     @GetMapping("/{userId}")
-    public List<MemoryVault> getMemory(@PathVariable Long userId) {
+    public List<MemoryResponse> getMemory(@PathVariable Long userId) {
         currentUser.requireSelf(userId);
-        return memoryVaultRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        return memoryVaultRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(memory -> MemoryResponse.from(memory))
+                .toList();
     }
 }

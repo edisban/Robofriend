@@ -1,6 +1,7 @@
 package com.bot.botback.controller;
 
 import com.bot.botback.dto.ListItemDoneRequest;
+import com.bot.botback.dto.ListItemResponse;
 import com.bot.botback.model.ListItem;
 import com.bot.botback.repository.ListItemRepository;
 import com.bot.botback.security.CurrentUser;
@@ -35,17 +36,19 @@ public class ListController {
     }
 
     @GetMapping
-    public List<ListItem> getItems() {
-        return repository.findByUserIdOrderByListNameAscDoneAscCreatedAtAsc(currentUser.id());
+    public List<ListItemResponse> getItems() {
+        return repository.findByUserIdOrderByListNameAscDoneAscCreatedAtAsc(currentUser.id()).stream()
+                .map(item -> ListItemResponse.from(item))
+                .toList();
     }
 
     @PatchMapping("/items/{itemId}")
-    public ListItem setDone(@PathVariable Long itemId, @Valid @RequestBody ListItemDoneRequest body) {
+    public ListItemResponse setDone(@PathVariable Long itemId, @Valid @RequestBody ListItemDoneRequest body) {
         ListItem item = owned(itemId);
         boolean done = body.getDone();
         item.setDone(done);
         item.setDoneAt(done ? OffsetDateTime.now(ZoneOffset.UTC) : null);
-        return repository.save(item);
+        return ListItemResponse.from(repository.save(item));
     }
 
     @DeleteMapping("/items/{itemId}")
