@@ -4,6 +4,7 @@ import {
   deleteChatMessage,
   deleteConversation,
   getChatHistory,
+  HISTORY_PAGE_SIZE,
   RateLimitedError,
   streamChatMessage,
   type ChatMessage,
@@ -71,9 +72,13 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
   const [messages, setMessages] = useState<Message[]>(() => [welcomeMessage(username)]);
   const [isSending, setIsSending] = useState(false);
   const [replyStarted, setReplyStarted] = useState(false);
+  /** Older messages exist on the server beyond what's loaded. */
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   // Refs let timers and callbacks read the latest values without re-subscribing.
   const messagesRef = useRef(messages);
   const sendingRef = useRef(false);
+  const loadingOlderRef = useRef(false);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -117,6 +122,7 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
         if (cancelled) return;
         const history = (data ?? []).map(fromServer);
         setMessages(history.length > 0 ? history : [welcomeMessage(username)]);
+        setHasOlder(history.length >= HISTORY_PAGE_SIZE);
         if (history.length === 0) return;
 
         // A failed check-in is just skipped; it must not wipe the history we already loaded.
@@ -140,12 +146,41 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
     };
   }, [userId, username, typeNewBotMessage, finishBotMessage]);
 
+  /**
+   * Loads the page of messages before the oldest one shown. `beforePrepend` runs right before
+   * they're added, so the screen can keep its scroll position.
+   */
+  const loadOlder = useCallback(
+    async (beforePrepend?: () => void) => {
+      const oldestId = messagesRef.current.find((m) => m.id !== undefined)?.id;
+      if (loadingOlderRef.current || !hasOlder || oldestId === undefined) return;
+      loadingOlderRef.current = true;
+      setLoadingOlder(true);
+      try {
+        const page = (await getChatHistory(userId, { beforeId: oldestId })).map(fromServer);
+        const known = new Set(messagesRef.current.map((m) => m.id));
+        const older = page.filter((m) => !known.has(m.id));
+        if (older.length > 0) {
+          beforePrepend?.();
+          setMessages((prev) => [...older, ...prev]);
+        }
+        setHasOlder(page.length >= HISTORY_PAGE_SIZE);
+      } catch {
+        notify("Couldn't load earlier messages. Scroll up to try again.");
+      } finally {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      }
+    },
+    [userId, hasOlder, notify],
+  );
+
   // Pick up messages RoboFriend sent on its own, e.g. a reminder that just came due.
   useEffect(() => {
     const poll = () => {
       if (sendingRef.current) return;
       const lastId = Math.max(0, ...messagesRef.current.map((m) => m.id ?? 0));
-      getChatHistory(userId, lastId)
+      getChatHistory(userId, { afterId: lastId })
         .then((data) => {
           const fresh = (data ?? []).map(fromServer);
           if (sendingRef.current || fresh.length === 0) return;
@@ -247,6 +282,7 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
   const clear = async (forgetMemories: boolean) => {
     await deleteConversation(forgetMemories);
     setMessages([welcomeMessage(username)]);
+    setHasOlder(false);
   };
 
   return {
@@ -254,6 +290,9 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
     isSending,
     /** Waiting for the first word of a reply. */
     isTyping: isSending && !replyStarted,
+    hasOlder,
+    loadingOlder,
+    loadOlder,
     send,
     regenerate,
     edit,

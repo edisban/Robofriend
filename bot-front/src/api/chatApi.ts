@@ -28,12 +28,20 @@ export class RateLimitedError extends Error {
   }
 }
 
-export async function getChatHistory(
-  userId: number,
-  afterId?: number,
-): Promise<ChatMessage[]> {
-  const query = afterId !== undefined ? `?afterId=${afterId}` : "";
-  return apiFetch<ChatMessage[]>(`/api/chat/history/${userId}${query}`);
+/** Messages per history page; a shorter page means there is nothing older. */
+export const HISTORY_PAGE_SIZE = 50;
+
+export type HistoryCursor = { afterId: number } | { beforeId: number };
+
+/**
+ * One page of the conversation, oldest first: the latest messages (no cursor), the ones before
+ * `beforeId` (scrolling back), or the ones after `afterId` (new messages RoboFriend sent).
+ */
+export async function getChatHistory(userId: number, cursor?: HistoryCursor): Promise<ChatMessage[]> {
+  const params = new URLSearchParams({ limit: String(HISTORY_PAGE_SIZE) });
+  if (cursor && "afterId" in cursor) params.set("afterId", String(cursor.afterId));
+  if (cursor && "beforeId" in cursor) params.set("beforeId", String(cursor.beforeId));
+  return apiFetch<ChatMessage[]>(`/api/chat/history/${userId}?${params}`);
 }
 
 /** RoboFriend's first message of the day, if it has something to bring up; otherwise null. */

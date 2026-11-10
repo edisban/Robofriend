@@ -67,9 +67,11 @@ public class ChatController {
 
     @GetMapping("/history/{userId}")
     public List<ChatMessageResponse> getHistory(@PathVariable Long userId,
-                                                @RequestParam(required = false) Long afterId) {
+                                                @RequestParam(required = false) Long afterId,
+                                                @RequestParam(required = false) Long beforeId,
+                                                @RequestParam(defaultValue = "" + ChatService.DEFAULT_PAGE_SIZE) int limit) {
         currentUser.requireSelf(userId);
-        return chatService.history(userId, afterId).stream()
+        return chatService.history(userId, afterId, beforeId, limit).stream()
                 .map(message -> ChatMessageResponse.from(message))
                 .toList();
     }

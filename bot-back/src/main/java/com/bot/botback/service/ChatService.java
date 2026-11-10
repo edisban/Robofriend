@@ -7,11 +7,14 @@ import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.MemoryVaultRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -22,6 +25,10 @@ import java.util.List;
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
+    /** Messages per history page when the app doesn't ask for a size. */
+    public static final int DEFAULT_PAGE_SIZE = 50;
+    public static final int MAX_PAGE_SIZE = 100;
 
     /** What RoboFriend should answer, and whether facts/reminders from it may be saved. */
     public record Turn(String message, Long userMessageId, boolean remember) {
@@ -38,11 +45,30 @@ public class ChatService {
         this.memoryVaultRepository = memoryVaultRepository;
     }
 
+    /**
+     * One page of the conversation, oldest first:
+     * <ul>
+     *   <li>no cursor: the latest {@code limit} messages (what the app shows when it opens)</li>
+     *   <li>{@code beforeId}: the {@code limit} messages just before it (scrolling back)</li>
+     *   <li>{@code afterId}: messages newer than it (new ones RoboFriend sent on its own)</li>
+     * </ul>
+     * A page shorter than {@code limit} means there is nothing more in that direction.
+     */
     @Transactional(readOnly = true)
-    public List<ChatMessage> history(Long userId, Long afterId) {
-        return afterId == null
-                ? chatRepo.findByUserIdOrderByCreatedAtAsc(userId)
-                : chatRepo.findByUserIdAndIdGreaterThanOrderByCreatedAtAsc(userId, afterId);
+    public List<ChatMessage> history(Long userId, Long afterId, Long beforeId, int limit) {
+        if (afterId != null && beforeId != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use either afterId or beforeId, not both");
+        }
+        PageRequest page = PageRequest.of(0, Math.max(1, Math.min(limit, MAX_PAGE_SIZE)));
+        if (afterId != null) {
+            return chatRepo.findByUserIdAndIdGreaterThanOrderByIdAsc(userId, afterId, page);
+        }
+        List<ChatMessage> newestFirst = beforeId == null
+                ? chatRepo.findByUserIdOrderByIdDesc(userId, page)
+                : chatRepo.findByUserIdAndIdLessThanOrderByIdDesc(userId, beforeId, page);
+        List<ChatMessage> oldestFirst = new ArrayList<>(newestFirst);
+        Collections.reverse(oldestFirst);
+        return oldestFirst;
     }
 
     /**

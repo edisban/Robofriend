@@ -94,7 +94,7 @@ class ApiSecurityTest {
         eleni.setPasswordHash(passwordEncoder.encode("correct-horse-1"));
         when(userRepository.findByUsername("eleni")).thenReturn(Optional.of(eleni));
         when(userRepository.findById(ELENI_ID)).thenReturn(Optional.of(eleni));
-        when(chatService.history(ELENI_ID, null)).thenReturn(List.of());
+        when(chatService.history(ELENI_ID, null, null, 50)).thenReturn(List.of());
         when(refreshTokenService.issue(anyLong())).thenReturn(new RefreshTokenService.Issued(ELENI_ID, "refresh-123"));
         eleniSession = new Cookie(AuthCookies.ACCESS, jwtUtil.generate("eleni"));
     }

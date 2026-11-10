@@ -1,8 +1,9 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState, type UIEvent } from "react";
 import {
   Alert,
   Badge,
   Box,
+  CircularProgress,
   Drawer,
   IconButton,
   Paper,
@@ -23,6 +24,9 @@ import { useChat } from "../../hooks/useChat";
 import { useOrganizer } from "../../hooks/useOrganizer";
 import { useStickToBottom } from "../../hooks/useStickToBottom";
 
+/** How close to the top (px) the user scrolls before earlier messages are fetched. */
+const LOAD_OLDER_THRESHOLD = 200;
+
 type ChatScreenProps = {
   currentUser: { userId: number; username: string };
 };
@@ -39,7 +43,25 @@ export default function ChatScreen({ currentUser }: ChatScreenProps) {
     onActivity: organizer.refresh,
     notify,
   });
-  const { scrollRef, contentRef } = useStickToBottom<HTMLDivElement, HTMLDivElement>();
+  const { scrollRef, contentRef, keepPositionDuringPrepend, scrollToBottom } =
+    useStickToBottom<HTMLDivElement, HTMLDivElement>();
+
+  // Scrolling up near the top of the conversation: fetch the previous page of messages. Only on
+  // the way up, so the smooth scroll down when the app opens doesn't trigger it.
+  const lastScrollTop = useRef(0);
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const top = event.currentTarget.scrollTop;
+    const scrollingUp = top < lastScrollTop.current;
+    lastScrollTop.current = top;
+    if (scrollingUp && top < LOAD_OLDER_THRESHOLD && chat.hasOlder && !chat.loadingOlder) {
+      chat.loadOlder(keepPositionDuringPrepend);
+    }
+  };
+
+  const sendAndFollow = (text: string) => {
+    scrollToBottom();
+    return chat.send(text);
+  };
 
   const [input, setInput] = useState("");
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -50,7 +72,7 @@ export default function ChatScreen({ currentUser }: ChatScreenProps) {
     const text = value.trim();
     if (!text || chat.isSending) return;
     setInput("");
-    chat.send(text);
+    sendAndFollow(text);
   };
 
   const handleClear = async (forgetMemories: boolean) => {
@@ -145,9 +167,19 @@ export default function ChatScreen({ currentUser }: ChatScreenProps) {
         {/* Conversation */}
         <Box
           ref={scrollRef}
+          onScroll={handleScroll}
+          data-testid="conversation"
           sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: { xs: 1.25, md: 3 }, py: 2, overscrollBehavior: "contain" }}
         >
           <Box ref={contentRef}>
+            {chat.loadingOlder && (
+              <Stack direction="row" spacing={1} sx={{ justifyContent: "center", alignItems: "center", py: 1 }}>
+                <CircularProgress size={14} />
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  Loading earlier messages…
+                </Typography>
+              </Stack>
+            )}
             <ChatWindow
               messages={chat.messages}
               isTyping={chat.isTyping}
@@ -190,7 +222,7 @@ export default function ChatScreen({ currentUser }: ChatScreenProps) {
         onConfirm={handleClear}
       />
 
-      {voiceOpen && <VoiceOverlay onClose={() => setVoiceOpen(false)} onSendTranscript={chat.send} />}
+      {voiceOpen && <VoiceOverlay onClose={() => setVoiceOpen(false)} onSendTranscript={sendAndFollow} />}
 
       <Snackbar
         open={notice !== null}
