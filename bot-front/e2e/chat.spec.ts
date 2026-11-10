@@ -31,9 +31,13 @@ test("opens on the latest 50 messages and loads older ones when scrolling up", a
   await expect(pane.getByText("message 70", { exact: true })).not.toBeAttached();
   expect(requests.filter((r) => r.path.startsWith("/api/chat/history/"))[0].path).toContain("limit=50");
 
-  // Scroll to the top: the page before message 71 is fetched and added above.
+  // Like a user: wait until the chat has scrolled down to the newest message, then scroll up.
+  // (Older messages load only when scrolling up, so they don't load while the chat opens.)
+  const atBottom = () => pane.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 5);
+  await expect.poll(atBottom).toBe(true);
+
+  // Up to the top: the page before message 71 is fetched and added above.
   await pane.evaluate((el) => el.scrollTo({ top: 0 }));
-  await pane.evaluate((el) => el.dispatchEvent(new Event("scroll")));
   await expect(pane.getByText("message 21", { exact: true })).toBeAttached();
   expect(requests.some((r) => r.path.includes("beforeId=71"))).toBe(true);
 
