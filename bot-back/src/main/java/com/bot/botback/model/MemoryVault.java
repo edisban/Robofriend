@@ -29,8 +29,7 @@ public class MemoryVault {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String fact;
 
-    @Column(columnDefinition = "TEXT")
-    private String embedding;
+    // The embedding column (vector(384)) is deliberately not mapped: see MemoryVaultRepository.
 
     /** Set for facts that change over time (e.g. "squat_max"); a newer fact with the same key replaces it. */
     @Column(name = "fact_key", length = 80)

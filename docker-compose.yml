@@ -42,10 +42,13 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # The backend runs the Flyway migrations, so it starts before the memory service.
+    # The backend owns the schema (Flyway). It doesn't wait for the embedding service: facts saved
+    # while that is still loading its model get their vectors in the background.
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      ai-memory-service:
+        condition: service_started
     ports:
       - "8080:8080"
     environment:
@@ -83,18 +86,11 @@ services:
       - .env
     expose:
       - "8000"
+    # Stateless: it only turns text into vectors and never touches the database.
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: botdb
-      DB_USER: botuser
-      DB_PASSWORD: botpass
       MEMORY_SERVICE_TOKEN: ${MEMORY_SERVICE_TOKEN:-local-dev-token}
-    depends_on:
-      backend:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,os,sys; r=urllib.request.Request('http://localhost:8000/health', headers={'X-Service-Token': os.environ.get('MEMORY_SERVICE_TOKEN','')}); sys.exit(0 if urllib.request.urlopen(r, timeout=5).status == 200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).status == 200 else 1)\""]
       interval: 15s
       timeout: 10s
       retries: 10

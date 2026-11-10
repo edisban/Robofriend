@@ -1,55 +1,41 @@
 package com.bot.botback.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
-
-import java.net.URI;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import com.bot.botback.config.MemoryServiceProperties;
 import com.bot.botback.model.MemoryVault;
 import com.bot.botback.repository.MemoryVaultRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.OffsetDateTime;
+import java.util.List;
+
+/**
+ * What RoboFriend remembers about each user. Facts live in memory_vault with a sentence vector
+ * from the embedding service, so they can be searched by meaning with pgvector.
+ *
+ * <p>The slow embedding call is made outside any transaction. If the embedding service is down,
+ * the fact is still saved and {@link EmbeddingMaintenance} adds its vector later.
+ */
 @Service
 public class MemoryService {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryService.class);
 
-    private final String memoryServiceUrl;
-    private final String serviceToken;
-    private final RestClient restClient;
-    private final ObjectMapper objectMapper;
     private final MemoryVaultRepository memoryVaultRepository;
+    private final EmbeddingClient embeddingClient;
+    private final TransactionTemplate transaction;
+    private final TransactionTemplate readOnlyTransaction;
+    private volatile Boolean iterativeScanSupported;
 
-    public MemoryService(MemoryServiceProperties properties, MemoryVaultRepository memoryVaultRepository) {
-        this.memoryServiceUrl = properties.url();
-        this.serviceToken = properties.token();
+    public MemoryService(MemoryVaultRepository memoryVaultRepository, EmbeddingClient embeddingClient,
+                         PlatformTransactionManager transactionManager) {
         this.memoryVaultRepository = memoryVaultRepository;
-        this.objectMapper = new ObjectMapper();
-        this.restClient = RestClient.builder()
-                .baseUrl(properties.url())
-                .requestFactory(requestFactory())
-                .build();
-    }
-
-    private static org.springframework.http.client.ClientHttpRequestFactory requestFactory() {
-        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
-                new org.springframework.http.client.SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(3));
-        factory.setReadTimeout(Duration.ofSeconds(10));
-        return factory;
+        this.embeddingClient = embeddingClient;
+        this.transaction = new TransactionTemplate(transactionManager);
+        this.readOnlyTransaction = new TransactionTemplate(transactionManager);
+        this.readOnlyTransaction.setReadOnly(true);
     }
 
     /** A remembered fact plus when it was saved, so relative words like "tomorrow" can be dated. */
@@ -80,84 +66,89 @@ public class MemoryService {
         }
     }
 
-    private static Memory toMemory(MemoryVault row) {
-        return new Memory(row.getFact(), row.getCreatedAt());
-    }
-
+    /** The user's facts closest in meaning to {@code query}; empty when search isn't available. */
     public List<Memory> searchMemories(Long userId, String query, int limit) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
         try {
-            Map<String, Object> payload = Map.of(
-                    "query", query == null ? "" : query,
-                    "user_id", userId,
-                    "limit", limit);
-
-            String response = restClient.post()
-                    .uri("/search")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("X-Service-Token", serviceToken)
-                    .body(payload)
-                    .retrieve()
-                    .body(String.class);
-
-            if (response == null || response.isBlank()) {
-                return List.of();
-            }
-
-            JsonNode root = objectMapper.readTree(response);
-            List<Memory> memories = new ArrayList<>();
-            for (JsonNode node : root) {
-                JsonNode fact = node.get("fact");
-                if (fact != null && !fact.asText().isBlank()) {
-                    memories.add(new Memory(fact.asText(), parseTimestamp(node.path("created_at").asText(null))));
-                }
-            }
-            return memories;
+            String vector = EmbeddingClient.toVectorLiteral(embeddingClient.embed(query));
+            return searchByVector(userId, vector, limit).stream().map(MemoryService::toMemory).toList();
         } catch (Exception e) {
             log.warn("Memory search failed for user {}: {}", userId, e.getMessage());
             return List.of();
         }
     }
 
-    private static OffsetDateTime parseTimestamp(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(value);
-        } catch (DateTimeParseException e) {
-            try {
-                // Python may omit the offset; the database stores UTC.
-                return LocalDateTime.parse(value).atOffset(ZoneOffset.UTC);
-            } catch (DateTimeParseException ignored) {
-                return null;
+    /** Nearest facts for a vector in pgvector's text form; exposed for tests. */
+    List<MemoryVault> searchByVector(Long userId, String vector, int limit) {
+        return readOnlyTransaction.execute(status -> {
+            if (iterativeScanSupported()) {
+                memoryVaultRepository.enableIterativeScan();
             }
-        }
+            return memoryVaultRepository.findNearest(userId, vector, limit);
+        });
     }
 
-    public void ingestFact(Long userId, String fact, String category, String key) {
+    /**
+     * Saves a fact. A {@code key} (e.g. "squat_max") marks a value that changes over time: the new
+     * fact replaces any earlier one with the same key.
+     */
+    public void ingestFact(Long userId, String fact, String key) {
         if (fact == null || fact.isBlank()) {
             return;
         }
+        String vector = null;
         try {
-            URI uri = UriComponentsBuilder.fromUriString(memoryServiceUrl + "/ingest")
-                    .queryParam("user_id", userId)
-                    .queryParam("message", fact)
-                    .queryParam("category", category == null ? "General" : category)
-                    .queryParamIfPresent("key", java.util.Optional.ofNullable(key))
-                    .build()
-                    .encode()
-                    .toUri();
-
-            restClient.post()
-                    .uri(uri)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("X-Service-Token", serviceToken)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            log.info("Ingested fact for user {}", userId);
+            vector = EmbeddingClient.toVectorLiteral(embeddingClient.embed(fact));
         } catch (Exception e) {
-            log.warn("Memory ingest failed for user {}: {}", userId, e.getMessage());
+            log.warn("Embedding failed for a fact of user {}; saving it and embedding later: {}",
+                    userId, e.getMessage());
         }
+        String embedding = vector;
+        transaction.executeWithoutResult(status -> {
+            if (key != null) {
+                memoryVaultRepository.deleteByUserAndKey(userId, key);
+            }
+            MemoryVault row = new MemoryVault();
+            row.setUserId(userId);
+            row.setFact(fact);
+            row.setFactKey(key);
+            row = memoryVaultRepository.saveAndFlush(row);
+            if (embedding != null) {
+                memoryVaultRepository.setEmbedding(row.getId(), embedding);
+            }
+        });
+        log.info("Saved fact for user {}", userId);
+    }
+
+    /** Iterative index scans arrived in pgvector 0.8; older versions just use the plain scan. */
+    private boolean iterativeScanSupported() {
+        Boolean supported = iterativeScanSupported;
+        if (supported == null) {
+            String version = memoryVaultRepository.vectorExtensionVersion();
+            supported = version != null && atLeast(version, 0, 8);
+            iterativeScanSupported = supported;
+            if (!supported) {
+                log.warn("pgvector {} has no iterative index scans; upgrade to 0.8+ for complete search "
+                        + "results with many users", version);
+            }
+        }
+        return supported;
+    }
+
+    static boolean atLeast(String version, int major, int minor) {
+        String[] parts = version.split("\\.");
+        try {
+            int maj = Integer.parseInt(parts[0]);
+            int min = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+            return maj > major || (maj == major && min >= minor);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static Memory toMemory(MemoryVault row) {
+        return new Memory(row.getFact(), row.getCreatedAt());
     }
 }

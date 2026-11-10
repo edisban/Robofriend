@@ -36,6 +36,9 @@ SELECT set_config('app.role', :'app_user', false);
 -- Extensions need superuser rights, which the app role may not have; the
 -- backend's Flyway migrations rely on this one being present.
 CREATE EXTENSION IF NOT EXISTS vector;
+-- Databases created with an older image keep the old extension version until updated; memory
+-- search uses iterative HNSW scans, which need pgvector 0.8+.
+ALTER EXTENSION vector UPDATE;
 
 -- Table structure is managed by the backend's Flyway migrations
 -- (bot-back/src/main/resources/db/migration). This script only handles the

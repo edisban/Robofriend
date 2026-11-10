@@ -63,7 +63,7 @@ class AuthFlowIntegrationTest {
     void migrationsCreateTheFullSchema() {
         List<String> versions = jdbc.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class);
-        assertEquals(List.of("1", "2", "3", "4"), versions);
+        assertEquals(List.of("1", "2", "3", "4", "5"), versions);
         Integer tables = jdbc.queryForObject("""
                 select count(*) from information_schema.tables
                 where table_schema = 'public' and table_name in

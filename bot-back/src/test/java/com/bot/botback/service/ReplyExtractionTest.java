@@ -176,7 +176,7 @@ class ReplyExtractionTest {
 
         extraction.persist(7L, result);
 
-        verify(memoryService).ingestFact(7L, "Has a cat", "General", null);
+        verify(memoryService).ingestFact(7L, "Has a cat", null);
         ArgumentCaptor<Reminder> saved = ArgumentCaptor.forClass(Reminder.class);
         verify(reminderRepository).save(saved.capture());
         assertEquals("Call mom", saved.getValue().getTitle());
@@ -187,7 +187,7 @@ class ReplyExtractionTest {
     void nothingIsSavedFromAnInvalidBlock() {
         extraction.persist(7L, extraction.parseMeta("{\"reminder\": {\"hasReminder\": true}}"));
 
-        verify(memoryService, never()).ingestFact(anyLong(), anyString(), anyString(), any());
+        verify(memoryService, never()).ingestFact(anyLong(), anyString(), any());
         verify(reminderRepository, never()).save(any());
         verify(listService, never()).apply(anyLong(), any());
     }

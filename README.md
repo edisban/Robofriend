@@ -32,17 +32,24 @@ https://github.com/user-attachments/assets/1f5f3eb1-01d7-4df6-9432-7f546a30ce33
 
 ```
 Browser (React)  →  nginx  →  Spring Boot API  →  Groq API (LLM, streamed)
-                                     │       →  Memory service (Python, embeddings)
-                                     ↓                    ↓
-                              PostgreSQL + pgvector  ←────┘
+                                     │       →  Embedding service (Python, text → vector; no database)
+                                     ↓
+                              PostgreSQL + pgvector
 ```
 
 | Part | Tech | Role |
 | --- | --- | --- |
 | `bot-front/` | React 19, TypeScript, Vite, MUI | The app; served by nginx, which also proxies `/api` |
-| `bot-back/` | Spring Boot 4, Java 17, Spring Security, JPA, Flyway | API, auth, prompt building, streaming, reminders |
-| `ai-memory-service/` | Python, FastAPI, sentence-transformers | Turns text into 384-dim embeddings; semantic search |
-| PostgreSQL | 16 + pgvector | All data; vector similarity search |
+| `bot-back/` | Spring Boot 4, Java 17, Spring Security, JPA, Flyway | API, auth, prompt building, streaming, reminders; the only service that uses the database |
+| `ai-memory-service/` | Python, FastAPI, sentence-transformers | Stateless: turns text into 384-dim embeddings (multilingual model) |
+| PostgreSQL | 16 + pgvector | All data; memories are `vector(384)` with an HNSW index |
+
+**Memory search.** The backend asks the embedding service for vectors and stores them itself. It finds a
+user's closest facts with pgvector's cosine distance (`<=>`). A user has relatively few facts, so the
+planner reads them through the `user_id` index and ranks them exactly. The HNSW index takes over if one
+user's facts make up a large share of the table; the search turns on `hnsw.iterative_scan` so the user
+filter doesn't cut the results short. A fact saved while the embedding service is down is kept and gets
+its vector in the background. When the embedding model changes, all facts are embedded again.
 
 How a message flows: the browser sends it to `POST /api/chat/stream`; the backend loads related memories,
 stats, reminders, lists and recent messages, builds one prompt and streams Groq's answer back as SSE.
@@ -121,7 +128,8 @@ validates it.
 | --- | --- |
 | `users` | accounts (BCrypt password hashes) |
 | `chat_messages` | the conversation |
-| `memory_vault` | remembered facts with their embeddings and the date learned |
+| `memory_vault` | remembered facts with their embeddings (`vector(384)`) and the date learned |
+| `embedding_meta` | which embedding model made the stored vectors |
 | `reminders` | reminders (PENDING → SENT → DONE) |
 | `list_items` | shopping / to-do / other list entries |
 | `refresh_tokens` | sign-in sessions (hashed tokens) |

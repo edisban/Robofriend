@@ -231,7 +231,7 @@ public class ReplyExtraction {
 
     private void saveFacts(Long userId, List<FactToSave> facts) {
         for (FactToSave fact : facts) {
-            memoryService.ingestFact(userId, fact.fact(), "General", fact.key());
+            memoryService.ingestFact(userId, fact.fact(), fact.key());
             log.info("Saved fact for user {}{}", userId, fact.key() == null ? "" : " [" + fact.key() + "]");
             log.debug("Fact for user {}: {}", userId, fact.fact());
         }
