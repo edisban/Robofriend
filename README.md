@@ -93,11 +93,3 @@ GitHub Actions runs all three on every push.
 - Sign-in, account deletion and AI replies are rate-limited. Deleting an account needs the password.
 - The model's hidden JSON is validated before anything is saved, and text written by users can't add a
   fake `###META###` marker.
-
-## Known limitations
-
-- Rate limits are kept in memory, so with several backend instances each one counts separately.
-- The hidden JSON could be replaced with Groq tool calling. We kept one streamed call because it's simpler
-  and cheaper.
-- BCrypt support can be removed once no old password hashes remain. The backend logs how many are left at
-  startup.
