@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/1f5f3eb1-01d7-4df6-9432-7f546a30ce33
 ## Features
 
 - **Streaming chat.** Replies appear word by word. You can regenerate a reply, edit your last message or
-  delete messages. Older messages load as you scroll up.
+  delete messages. The chat opens on the latest 50 messages and loads older ones as you scroll up.
 - **Memory.** RoboFriend remembers facts and the date it learned them, and finds the relevant ones by
   meaning. Values that change over time, like a squat max, are updated instead of duplicated.
 - **Reminders.** "Remind me tomorrow at 9 to call mom" creates a reminder in your timezone. When it's
@@ -23,8 +23,8 @@ https://github.com/user-attachments/assets/1f5f3eb1-01d7-4df6-9432-7f546a30ce33
 - **Lists.** "Add milk and eggs to my shopping list", then "what's on my list?"
 - **Daily check-in.** The first time you open the app each day, RoboFriend messages you if something
   matters that day, such as an exam, a follow-up or your birthday.
-- **Profile.** Set the name RoboFriend uses for you and your birthday, or delete your account and all
-  its data.
+- **Profile.** Set the name RoboFriend uses for you and your birthday (it wishes you a happy birthday on
+  the day), or delete your account and all its data.
 - **Voice mode**, **light and dark themes**, and a **mobile layout**.
 
 ## Architecture
@@ -47,6 +47,13 @@ lists and recent messages. It builds one prompt and streams Groq's reply to the 
 Events. After a `###META###` marker, the model also writes a JSON block with facts, reminders and list
 changes to save. That block is never shown to the user and is checked strictly before anything is saved.
 
+**Reliability:**
+- Each due reminder is claimed with one atomic database update, so it is sent once even with several
+  backend instances.
+- If the embedding service is down, chat keeps working without memory search. New facts are saved anyway
+  and get their vectors in the background.
+- If the AI can't be reached, the user gets a short friendly message instead of an error.
+
 ## Run it
 
 You need Docker and a [Groq](https://console.groq.com) API key.
@@ -67,8 +74,8 @@ You need Docker and a [Groq](https://console.groq.com) API key.
 
 3. Open **http://localhost:8081**.
 
-The API is also on `localhost:8080` and PostgreSQL on `localhost:5434`. The database schema is managed by
-Flyway migrations in `bot-back/src/main/resources/db/migration`.
+The API is also on `localhost:8080` (health check: `/actuator/health`) and PostgreSQL on `localhost:5434`.
+The database schema is managed by Flyway migrations in `bot-back/src/main/resources/db/migration`.
 
 **Frontend with hot reload:** with the Docker stack running, run `cd bot-front && npm install && npm run dev`
 and open http://localhost:5174.
