@@ -20,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -33,8 +34,8 @@ public class CheckInService {
 
     private static final Logger log = LoggerFactory.getLogger(CheckInService.class);
     private static final String SKIP = "SKIP";
-    private static final DateTimeFormatter DAY_TIME = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm");
-    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d MMM yyyy");
+    private static final DateTimeFormatter DAY_TIME = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.ENGLISH);
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.ENGLISH);
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final UserRepository userRepository;

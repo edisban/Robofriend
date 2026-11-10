@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -29,8 +30,8 @@ public class PromptBuilder {
 
     private static final int HISTORY_MESSAGES = 12;
     private static final DateTimeFormatter HUMAN_TIME =
-            DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm");
-    private static final DateTimeFormatter MEMORY_DATE = DateTimeFormatter.ofPattern("EEE d MMM yyyy");
+            DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.ENGLISH);
+    private static final DateTimeFormatter MEMORY_DATE = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.ENGLISH);
 
     private final MemoryService memoryService;
     private final ReminderRepository reminderRepository;
