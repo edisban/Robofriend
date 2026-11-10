@@ -12,6 +12,8 @@ import com.bot.botback.security.RefreshTokenService;
 import com.bot.botback.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Sign-up, sign-in and the cookie-based session: a short-lived access token plus a rotating
@@ -34,6 +37,8 @@ import java.util.Optional;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -41,6 +46,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokens;
     private final AuthCookies cookies;
     private final CurrentUser currentUser;
+    private volatile String dummyHash;
 
     public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
                           LoginRateLimiter rateLimiter, RefreshTokenService refreshTokens, AuthCookies cookies,
@@ -87,14 +93,43 @@ public class AuthController {
         if (blocked.isPresent()) {
             return tooManyAttempts(blocked.get());
         }
-        Optional<User> user = userRepository.findByUsername(username)
-                .filter(u -> passwordEncoder.matches(req.getPassword(), u.getPasswordHash()));
-        if (user.isEmpty()) {
+        Optional<User> found = userRepository.findByUsername(username);
+        // Check a password even for unknown usernames, so the response time doesn't reveal which exist.
+        String hash = found.map(User::getPasswordHash).orElseGet(this::dummyHash);
+        boolean matches = passwordEncoder.matches(req.getPassword(), hash);
+        if (found.isEmpty() || !matches) {
             rateLimiter.recordFailedLogin(ip, username);
             return error(HttpStatus.UNAUTHORIZED, "Wrong username or password.");
         }
         rateLimiter.resetLogin(ip, username);
-        return startSession(user.get());
+        User user = found.get();
+        upgradeHashIfNeeded(user, req.getPassword());
+        return startSession(user);
+    }
+
+    /** Re-hashes an old (BCrypt) password with Argon2id now that we briefly have it in plain text. */
+    private void upgradeHashIfNeeded(User user, String password) {
+        if (!passwordEncoder.upgradeEncoding(user.getPasswordHash())) {
+            return;
+        }
+        try {
+            user.setPasswordHash(passwordEncoder.encode(password));
+            userRepository.save(user);
+            log.info("Upgraded the password hash of user {} to Argon2id", user.getId());
+        } catch (Exception e) {
+            // Signing in matters more; it will be tried again next time.
+            log.warn("Could not upgrade the password hash of user {}: {}", user.getId(), e.getMessage());
+        }
+    }
+
+    /** A real hash to check against when the username doesn't exist; made once. */
+    private String dummyHash() {
+        String hash = dummyHash;
+        if (hash == null) {
+            hash = passwordEncoder.encode(UUID.randomUUID().toString());
+            dummyHash = hash;
+        }
+        return hash;
     }
 
     /** Swaps the refresh cookie for a new pair of cookies; 401 when the session is over. */

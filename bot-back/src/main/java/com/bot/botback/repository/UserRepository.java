@@ -14,6 +14,9 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
 
+    /** Accounts whose password hash doesn't match the pattern (e.g. not yet Argon2id). */
+    long countByPasswordHashNotLike(String pattern);
+
     /**
      * Claims today's check-in for the user. Returns 1 only for the first caller of the day, so two
      * open tabs can't both trigger one.

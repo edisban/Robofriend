@@ -171,7 +171,10 @@ class ApiSecurityTest {
         mvc.perform(post("/api/auth/register").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"newuser\",\"password\":\"short\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Password must be 8-72 characters."));
+                .andExpect(jsonPath("$.error").value("Password must be 8-128 characters."));
+        mvc.perform(post("/api/auth/register").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"newuser\",\"password\":\"" + "x".repeat(129) + "\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

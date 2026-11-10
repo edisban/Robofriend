@@ -18,6 +18,6 @@ public class RegisterRequest {
 
     /** BCrypt only uses the first 72 bytes of a password. */
     @NotBlank(message = "Please choose a password.")
-    @Size(min = 8, max = 72, message = "Password must be 8-72 characters.")
+    @Size(min = 8, max = 128, message = "Password must be 8-128 characters.")
     private String password;
 }

@@ -109,7 +109,10 @@ on http://localhost:5174; it proxies `/api` to the backend on port 8080.
 
 ## Security
 
-- Passwords hashed with BCrypt; sign-up requires 8–72 characters; failed logins are rate-limited.
+- Passwords are hashed with **Argon2id** (OWASP settings: 19 MiB, 2 passes). Accounts from before the switch
+  keep their BCrypt hash until they next sign in, when it is re-hashed with Argon2id; the backend logs at
+  startup how many are left. Sign-up requires 8–128 characters. Failed logins are rate-limited, and unknown
+  usernames take as long to refuse as wrong passwords.
 - Sessions live in **HttpOnly, Secure, SameSite=Strict cookies**, so page scripts never see a token:
   - `rf_access`: a JWT valid for 15 minutes
   - `rf_refresh`: a random token valid for 30 days, stored hashed, **rotated on every use**; reusing an old one
@@ -126,7 +129,7 @@ validates it.
 
 | Table | Holds |
 | --- | --- |
-| `users` | accounts (BCrypt password hashes) |
+| `users` | accounts (Argon2id password hashes) |
 | `chat_messages` | the conversation |
 | `memory_vault` | remembered facts with their embeddings (`vector(384)`) and the date learned |
 | `embedding_meta` | which embedding model made the stored vectors |

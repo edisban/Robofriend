@@ -11,6 +11,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -25,6 +26,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -160,6 +162,35 @@ class AuthFlowIntegrationTest {
     private int count(String table, Long userId) {
         Integer n = jdbc.queryForObject("select count(*) from " + table + " where user_id = ?", Integer.class, userId);
         return n == null ? 0 : n;
+    }
+
+    @Test
+    void oldBcryptPasswordsStillSignInAndAreUpgradedToArgon2id() throws Exception {
+        jdbc.update("insert into users (username, password_hash) values ('it_legacy', ?)",
+                new BCryptPasswordEncoder().encode("old-password-1"));
+        String login = "{\"username\":\"it_legacy\",\"password\":\"old-password-1\"}";
+
+        mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(login))
+                .andExpect(status().isOk());
+
+        String hash = jdbc.queryForObject("select password_hash from users where username = 'it_legacy'", String.class);
+        assertTrue(hash.startsWith("{argon2}$argon2id$"), hash);
+        // Signing in keeps working with the new hash, and wrong passwords are still refused.
+        mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(login))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"it_legacy\",\"password\":\"old-password-2\"}"))
+                .andExpect(status().isUnauthorized());
+        assertEquals(hash, jdbc.queryForObject(
+                "select password_hash from users where username = 'it_legacy'", String.class), "upgraded only once");
+    }
+
+    @Test
+    void unknownUsernamesAreRefusedLikeWrongPasswords() throws Exception {
+        mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"nobody_here\",\"password\":\"whatever-1\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Wrong username or password."));
     }
 
     private static Cookie cookie(MvcResult result, String name) {
