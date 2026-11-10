@@ -6,6 +6,7 @@ import com.bot.botback.config.StreamingConfig;
 import com.bot.botback.model.User;
 import com.bot.botback.repository.UserRepository;
 import com.bot.botback.security.AuthCookies;
+import com.bot.botback.security.ChatRateLimiter;
 import com.bot.botback.security.CurrentUser;
 import com.bot.botback.security.LoginRateLimiter;
 import com.bot.botback.security.RefreshTokenService;
@@ -39,7 +40,10 @@ import java.util.Optional;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -78,6 +82,7 @@ class ApiSecurityTest {
     @MockitoBean private ReminderService reminderService;
     @MockitoBean private ListService listService;
     @MockitoBean private MemoryService memoryService;
+    @MockitoBean private ChatRateLimiter chatRateLimiter;
 
     private Cookie eleniSession;
 
@@ -183,6 +188,25 @@ class ApiSecurityTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"message\":\"" + "x".repeat(4001) + "\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void chatOverTheRateLimitIs429WithRetryAfterAndNothingIsSaved() throws Exception {
+        when(chatRateLimiter.tryAcquire(ELENI_ID)).thenReturn(Optional.of(
+                new ChatRateLimiter.Blocked(ChatRateLimiter.Limit.MINUTE, Duration.ofSeconds(42))));
+
+        mvc.perform(post("/api/chat/stream").with(csrf()).cookie(eleniSession)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"hi\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "42"))
+                .andExpect(jsonPath("$.limit").value("minute"))
+                .andExpect(jsonPath("$.error").value(containsString("Slow down")));
+        verify(chatService, never()).startTurn(anyLong(), any());
+
+        mvc.perform(post("/api/chat/checkin").with(csrf()).cookie(eleniSession)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isTooManyRequests());
+        verify(checkInService, never()).checkIn(anyLong(), any());
     }
 
     @Test

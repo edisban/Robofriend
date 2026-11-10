@@ -17,6 +17,17 @@ export type StreamResult = {
   userMessageId?: number;
 };
 
+/** The server refused a reply because the user hit their per-minute or daily message limit. */
+export class RateLimitedError extends Error {
+  readonly limit: "minute" | "day";
+
+  constructor(limit: "minute" | "day") {
+    super(`Chat rate limit reached (${limit})`);
+    this.name = "RateLimitedError";
+    this.limit = limit;
+  }
+}
+
 export async function getChatHistory(
   userId: number,
   afterId?: number,
@@ -59,6 +70,10 @@ export async function streamChatMessage(
     body: JSON.stringify({ ...request, timeZone: localTimeZone() }),
   });
 
+  if (response.status === 429) {
+    const body = (await response.json().catch(() => ({}))) as { limit?: string };
+    throw new RateLimitedError(body.limit === "day" ? "day" : "minute");
+  }
   if (!response.ok || !response.body) {
     throw new Error(`Request failed: ${response.status}`);
   }

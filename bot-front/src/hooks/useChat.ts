@@ -4,6 +4,7 @@ import {
   deleteChatMessage,
   deleteConversation,
   getChatHistory,
+  RateLimitedError,
   streamChatMessage,
   type ChatMessage,
   type StreamRequest,
@@ -14,6 +15,16 @@ import { createTypewriter } from "../utils/typewriter";
 
 const POLL_INTERVAL_MS = 20000;
 const FALLBACK_REPLY = "Hmm, I couldn't reach the server just now. Mind trying that again?";
+const SLOW_DOWN_REPLY = "Slow down a little 😅 I can't keep up! Give me a minute and try again.";
+const DAILY_LIMIT_REPLY = "We've talked a lot today! 😊 Let's pick this up a bit later.";
+
+/** What RoboFriend says in the chat when a reply couldn't be produced. */
+function failureReply(error: unknown): string {
+  if (error instanceof RateLimitedError) {
+    return error.limit === "day" ? DAILY_LIMIT_REPLY : SLOW_DOWN_REPLY;
+  }
+  return FALLBACK_REPLY;
+}
 
 type UseChatOptions = {
   userId: number;
@@ -108,7 +119,8 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
         setMessages(history.length > 0 ? history : [welcomeMessage(username)]);
         if (history.length === 0) return;
 
-        const checkIn = await dailyCheckIn();
+        // A failed check-in is just skipped; it must not wipe the history we already loaded.
+        const checkIn = await dailyCheckIn().catch(() => null);
         if (!checkIn || cancelled || sendingRef.current) return;
         setBusy(true);
         await new Promise((resolve) => setTimeout(resolve, 1200)); // a moment of "typing…"
@@ -183,15 +195,16 @@ export function useChat({ userId, username, onActivity, notify }: UseChatOptions
         Notification.requestPermission().catch(() => undefined);
       }
       return result.reply;
-    } catch {
+    } catch (error) {
       typer.cancel();
       const last = messagesRef.current.at(-1);
       if (last?.streaming) {
         finishBotMessage({ ...last, streaming: false });
-      } else {
-        finishBotMessage({ role: "bot", text: FALLBACK_REPLY, createdAt: new Date().toISOString() });
+        return last.text;
       }
-      return FALLBACK_REPLY;
+      const text = failureReply(error);
+      finishBotMessage({ role: "bot", text, createdAt: new Date().toISOString() });
+      return text;
     } finally {
       setBusy(false);
     }

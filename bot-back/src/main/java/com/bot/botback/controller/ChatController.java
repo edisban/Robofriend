@@ -5,6 +5,8 @@ import com.bot.botback.dto.ChatMessageResponse;
 import com.bot.botback.dto.MessageRequest;
 import com.bot.botback.model.ChatMessage;
 import com.bot.botback.model.Sender;
+import com.bot.botback.security.ChatRateLimitedException;
+import com.bot.botback.security.ChatRateLimiter;
 import com.bot.botback.security.CurrentUser;
 import com.bot.botback.service.AiService;
 import com.bot.botback.service.ChatService;
@@ -49,15 +51,18 @@ public class ChatController {
     private final CurrentUser currentUser;
     private final CheckInService checkInService;
     private final TaskExecutor streamExecutor;
+    private final ChatRateLimiter chatRateLimiter;
 
     public ChatController(ChatService chatService, AiService aiService, CurrentUser currentUser,
                           CheckInService checkInService,
-                          @Qualifier(StreamingConfig.REPLY_STREAM_EXECUTOR) TaskExecutor streamExecutor) {
+                          @Qualifier(StreamingConfig.REPLY_STREAM_EXECUTOR) TaskExecutor streamExecutor,
+                          ChatRateLimiter chatRateLimiter) {
         this.chatService = chatService;
         this.aiService = aiService;
         this.currentUser = currentUser;
         this.checkInService = checkInService;
         this.streamExecutor = streamExecutor;
+        this.chatRateLimiter = chatRateLimiter;
     }
 
     @GetMapping("/history/{userId}")
@@ -77,6 +82,8 @@ public class ChatController {
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@Valid @RequestBody MessageRequest req) {
         Long userId = currentUser.id();
+        // Before anything is saved, so a refused message doesn't end up in the history.
+        requireReplyBudget(userId);
         ZoneId zone = zoneOf(req.getTimeZone());
         ChatService.Turn turn = chatService.startTurn(userId, req);
 
@@ -116,8 +123,10 @@ public class ChatController {
     /** Called when the app opens: RoboFriend's first message of the day, if it has something to say. */
     @PostMapping("/checkin")
     public ResponseEntity<ChatMessageResponse> checkIn(@Valid @RequestBody(required = false) MessageRequest req) {
+        Long userId = currentUser.id();
+        requireReplyBudget(userId);
         ZoneId zone = zoneOf(req == null ? null : req.getTimeZone());
-        return checkInService.checkIn(currentUser.id(), zone)
+        return checkInService.checkIn(userId, zone)
                 .map(message -> ResponseEntity.ok(ChatMessageResponse.from(message)))
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
@@ -136,6 +145,13 @@ public class ChatController {
     public ResponseEntity<Void> deleteMessage(@PathVariable Long messageId) {
         chatService.deleteMessage(currentUser.id(), messageId);
         return ResponseEntity.noContent().build();
+    }
+
+    private void requireReplyBudget(Long userId) {
+        chatRateLimiter.tryAcquire(userId).ifPresent(blocked -> {
+            log.info("User {} hit the chat rate limit ({})", userId, blocked.limit());
+            throw new ChatRateLimitedException(blocked);
+        });
     }
 
     private static ZoneId zoneOf(String timeZone) {
