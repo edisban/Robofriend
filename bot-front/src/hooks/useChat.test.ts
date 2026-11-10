@@ -117,6 +117,9 @@ describe("useChat", () => {
     const { result } = setup();
 
     await waitFor(() => expect(api.dailyCheckIn).toHaveBeenCalled());
+    // Let the refused check-in settle (and React re-render) before looking: the bug this guards
+    // against replaced the history only after the rejection was handled.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
     expect(shape(result.current.messages)).toEqual([["bot", "Hi Eleni!", 1]]);
   });
