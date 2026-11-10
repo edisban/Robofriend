@@ -49,9 +49,11 @@ public class ReminderNotifier {
 
         for (Reminder reminder : due) {
             try {
-                // Mark first so a slow nudge can't make the next run deliver it twice.
-                reminder.setStatus(ReminderStatus.SENT);
-                reminderRepository.save(reminder);
+                // Claim atomically first: another instance (or a slow previous run) may have taken it,
+                // or the user may have marked it done since the lookup.
+                if (reminderRepository.claimForDelivery(reminder.getId()) == 0) {
+                    continue;
+                }
 
                 ChatMessage message = new ChatMessage();
                 message.setUserId(reminder.getUserId());
