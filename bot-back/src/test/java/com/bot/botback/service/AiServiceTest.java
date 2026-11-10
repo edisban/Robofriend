@@ -21,7 +21,8 @@ class AiServiceTest {
 
         AiService service = new AiService(memoryService,
                 new GroqClient(new GroqProperties("", "test-model")),
-                new PromptBuilder(memoryService, reminderRepo, chatRepo, listService),
+                new PromptBuilder(memoryService, reminderRepo, chatRepo, listService,
+                        Mockito.mock(com.bot.botback.repository.UserRepository.class)),
                 new ReplyExtraction(memoryService, reminderRepo, listService));
 
         String reply = service.generateReply(1L, "Hello there", ZoneOffset.UTC, token -> { }, true);

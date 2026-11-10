@@ -6,10 +6,12 @@ import com.bot.botback.model.ReminderStatus;
 import com.bot.botback.model.Sender;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
+import com.bot.botback.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -37,15 +39,18 @@ public class PromptBuilder {
     private final ReminderRepository reminderRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ListService listService;
+    private final UserRepository userRepository;
 
     public PromptBuilder(MemoryService memoryService,
                          ReminderRepository reminderRepository,
                          ChatMessageRepository chatMessageRepository,
-                         ListService listService) {
+                         ListService listService,
+                         UserRepository userRepository) {
         this.memoryService = memoryService;
         this.reminderRepository = reminderRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.listService = listService;
+        this.userRepository = userRepository;
     }
 
     /** The system prompt: persona, rules, and everything RoboFriend knows that's relevant now. */
@@ -54,9 +59,14 @@ public class PromptBuilder {
         List<MemoryService.Memory> profile = memoryService.profileFacts(userId);
         java.util.Set<String> profileFacts = profile.stream().map(m -> m.fact())
                 .collect(Collectors.toSet());
-        String profileContext = profile.isEmpty()
+        // What they set on their profile page comes first, then the stats learned from chatting.
+        List<String> profileLines = new ArrayList<>();
+        userRepository.findById(userId).ifPresent(user ->
+                profileLines.addAll(ProfileService.describe(user, LocalDate.now(zone))));
+        profile.forEach(m -> profileLines.add(m.fact()));
+        String profileContext = profileLines.isEmpty()
                 ? "Nothing yet"
-                : profile.stream().map(m -> "- " + m.fact()).collect(Collectors.joining("\n"));
+                : profileLines.stream().map(line -> "- " + line).collect(Collectors.joining("\n"));
         List<MemoryService.Memory> searched = memories.stream()
                 .filter(m -> !profileFacts.contains(m.fact()))
                 .toList();

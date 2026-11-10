@@ -94,9 +94,11 @@ class ApiSecurityTest {
         eleni.setPasswordHash(passwordEncoder.encode("correct-horse-1"));
         when(userRepository.findByUsername("eleni")).thenReturn(Optional.of(eleni));
         when(userRepository.findById(ELENI_ID)).thenReturn(Optional.of(eleni));
+        when(userRepository.existsById(ELENI_ID)).thenReturn(true);
+        when(userRepository.findById(ELENI_ID)).thenReturn(Optional.of(eleni));
         when(chatService.history(ELENI_ID, null, null, 50)).thenReturn(List.of());
         when(refreshTokenService.issue(anyLong())).thenReturn(new RefreshTokenService.Issued(ELENI_ID, "refresh-123"));
-        eleniSession = new Cookie(AuthCookies.ACCESS, jwtUtil.generate("eleni"));
+        eleniSession = new Cookie(AuthCookies.ACCESS, jwtUtil.generate(ELENI_ID));
     }
 
     @Test
@@ -108,14 +110,14 @@ class ApiSecurityTest {
     void forgedAccessTokenIsRejected() throws Exception {
         JwtUtil other = new JwtUtil(new AuthProperties("some-other-secret-0123456789-abcdefgh",
                 Duration.ofMinutes(5), Duration.ofDays(1), true));
-        mvc.perform(get("/api/chat/history/" + ELENI_ID).cookie(new Cookie(AuthCookies.ACCESS, other.generate("eleni"))))
+        mvc.perform(get("/api/chat/history/" + ELENI_ID).cookie(new Cookie(AuthCookies.ACCESS, other.generate(ELENI_ID))))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void bearerHeaderIsNoLongerAccepted() throws Exception {
         mvc.perform(get("/api/chat/history/" + ELENI_ID)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtUtil.generate("eleni")))
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtUtil.generate(ELENI_ID)))
                 .andExpect(status().isUnauthorized());
     }
 

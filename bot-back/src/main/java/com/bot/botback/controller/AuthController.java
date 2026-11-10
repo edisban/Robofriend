@@ -141,7 +141,7 @@ public class AuthController {
         if (user.isEmpty()) {
             return cookies.cleared(ResponseEntity.status(HttpStatus.UNAUTHORIZED)).build();
         }
-        return cookies.withSession(ResponseEntity.ok(), jwtUtil.generate(user.get().getUsername()), issued.get().token())
+        return cookies.withSession(ResponseEntity.ok(), jwtUtil.generate(user.get().getId()), issued.get().token())
                 .body(SessionResponse.of(user.get()));
     }
 
@@ -162,7 +162,7 @@ public class AuthController {
 
     private ResponseEntity<?> startSession(User user) {
         String refreshToken = refreshTokens.issue(user.getId()).token();
-        return cookies.withSession(ResponseEntity.ok(), jwtUtil.generate(user.getUsername()), refreshToken)
+        return cookies.withSession(ResponseEntity.ok(), jwtUtil.generate(user.getId()), refreshToken)
                 .body(SessionResponse.of(user));
     }
 
@@ -178,7 +178,8 @@ public class AuthController {
     }
 
     /** nginx passes the real client address in X-Real-IP. */
-    private static String clientIp(HttpServletRequest http) {
+    /** The client address; nginx passes the real one in X-Real-IP. */
+    static String clientIp(HttpServletRequest http) {
         String realIp = http.getHeader("X-Real-IP");
         return realIp != null && !realIp.isBlank() ? realIp.trim() : http.getRemoteAddr();
     }

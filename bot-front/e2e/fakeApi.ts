@@ -13,6 +13,8 @@ type FakeApiOptions = {
 };
 
 const USER_ID = 7;
+/** The password the fake account has, for confirming account deletion. */
+export const PASSWORD = "correct-horse-1";
 
 /** Builds a server-sent-events body: token events for each piece, then the done event. */
 export function sseReply(pieces: string[], ids = { userMessageId: 1001, botMessageId: 1002 }) {
@@ -29,6 +31,14 @@ export async function fakeApi(page: Page, options: FakeApiOptions = {}) {
   let user = options.signedInAs ? { userId: USER_ID, username: options.signedInAs } : null;
   const history = options.history ?? [];
   const requests: { method: string; path: string; body?: unknown }[] = [];
+  let displayName: string | null = null;
+  let birthday: string | null = null;
+  const profile = () => ({
+    username: user?.username,
+    displayName,
+    birthday,
+    memberSince: "2026-10-01T10:00:00Z",
+  });
 
   // Only real API paths: a glob like "**/api/**" would also catch the app's own source files
   // that the dev server serves from /src/api/.
@@ -67,6 +77,20 @@ export async function fakeApi(page: Page, options: FakeApiOptions = {}) {
         contentType: "text/event-stream",
         body: sseReply(["Hey! ", "Nice to ", "meet you 😊"]),
       });
+    }
+    if (path === "/api/profile") {
+      if (!user) return json(401, { error: "Not signed in" });
+      if (method === "GET") return json(200, profile());
+      if (method === "PUT") {
+        displayName = body.displayName || null;
+        birthday = body.birthday;
+        return json(200, profile());
+      }
+      if (method === "DELETE") {
+        if (body.password !== PASSWORD) return json(403, { error: "Wrong password." });
+        user = null;
+        return json(204);
+      }
     }
     if (path === "/api/lists") return json(200, []);
     if (path.startsWith("/api/reminders/")) return json(200, []);

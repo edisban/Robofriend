@@ -25,9 +25,17 @@ public class CurrentUser {
         if (auth == null || !auth.isAuthenticated() || auth.getName() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
-        return userRepository.findByUsername(auth.getName())
-                .map(user -> user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        // The principal is the user id from the access token; the account must still exist.
+        Long userId;
+        try {
+            userId = Long.valueOf(auth.getName());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        if (!userRepository.existsById(userId)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return userId;
     }
 
     public void requireSelf(Long userId) {

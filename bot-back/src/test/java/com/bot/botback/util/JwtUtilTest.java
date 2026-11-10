@@ -3,6 +3,7 @@ package com.bot.botback.util;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,14 +17,14 @@ class JwtUtilTest {
     @Test
     void generatesValidToken() {
         JwtUtil jwt = new JwtUtil(SECRET, Duration.ofMinutes(15));
-        String t = jwt.generate("user");
+        String t = jwt.generate(42L);
         assertTrue(jwt.isValid(t));
-        assertEquals("user", jwt.extractUsername(t));
+        assertEquals(Optional.of(42L), jwt.extractUserId(t));
     }
 
     @Test
     void tokenSignedWithAnotherSecretIsRejected() {
-        String foreign = new JwtUtil("another-secret-0123456789-abcdefghijk", Duration.ofMinutes(15)).generate("user");
+        String foreign = new JwtUtil("another-secret-0123456789-abcdefghijk", Duration.ofMinutes(15)).generate(42L);
         assertFalse(new JwtUtil(SECRET, Duration.ofMinutes(15)).isValid(foreign));
     }
 

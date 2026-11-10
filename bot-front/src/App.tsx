@@ -11,6 +11,7 @@ import WelcomeScreen from "./components/auth/WelcomeScreen";
 import ChatScreen from "./components/chat/ChatScreen";
 import AuroraBackground from "./components/common/AuroraBackground";
 import SplashIntro from "./components/common/SplashIntro";
+import ProfileScreen from "./components/profile/ProfileScreen";
 import AppHeader from "./components/layout/AppHeader";
 import AppFooter from "./components/layout/AppFooter";
 import { AUTH_EXPIRED_EVENT, apiFetch } from "./api/apiClient";
@@ -25,7 +26,7 @@ interface SessionUser {
   username: string;
 }
 
-type Screen = "login" | "welcome" | "chat";
+type Screen = "login" | "welcome" | "chat" | "profile";
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -135,6 +136,16 @@ function App() {
     setScreen("login");
   };
 
+  // The server already ended the session and cleared the cookies.
+  const handleAccountDeleted = () => {
+    setCurrentUser(null);
+    setUsername("");
+    setPassword("");
+    setAuthMode("login");
+    setScreen("login");
+    setSnackbar({ message: "Your account has been deleted. Take care! 👋", severity: "success" });
+  };
+
   const renderScreen = () => {
     if (!sessionChecked) {
       return null;
@@ -142,6 +153,15 @@ function App() {
     if (screen === "chat" && currentUser) {
       return (
         <ChatScreen currentUser={currentUser} />
+      );
+    }
+    if (screen === "profile" && currentUser) {
+      return (
+        <ProfileScreen
+          onBack={() => setScreen("chat")}
+          onAccountDeleted={handleAccountDeleted}
+          notify={(message) => setSnackbar({ message, severity: "success" })}
+        />
       );
     }
     if (screen === "welcome") {
@@ -194,6 +214,7 @@ function App() {
           darkMode={darkMode}
           onToggleTheme={() => setDarkMode((prev) => !prev)}
           onLogout={handleLogout}
+          onOpenProfile={() => setScreen("profile")}
         />
         <Box
           component="main"

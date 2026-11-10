@@ -69,7 +69,7 @@ class ChatHistoryPagingIntegrationTest {
         Long other = jdbc.queryForObject(
                 "insert into users (username, password_hash) values ('someone_else', 'x') returning id", Long.class);
         jdbc.update("insert into chat_messages (user_id, sender, content) values (?, 'USER', 'not yours')", other);
-        session = new Cookie(AuthCookies.ACCESS, jwtUtil.generate("pager"));
+        session = new Cookie(AuthCookies.ACCESS, jwtUtil.generate(userId));
     }
 
     private List<String> page(String query) throws Exception {

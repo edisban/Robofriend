@@ -17,7 +17,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { DarkMode, LightMode, Logout } from "@mui/icons-material";
+import { DarkMode, LightMode, Logout, PersonOutlined } from "@mui/icons-material";
 import FriendAvatar from "../common/FriendAvatar";
 import { ACCENT_GRADIENT, glassPanel } from "../../theme/theme";
 
@@ -26,6 +26,7 @@ type AppHeaderProps = {
   darkMode: boolean;
   onToggleTheme: () => void;
   onLogout?: () => void;
+  onOpenProfile?: () => void;
 };
 
 export default function AppHeader({
@@ -33,6 +34,7 @@ export default function AppHeader({
   darkMode,
   onToggleTheme,
   onLogout,
+  onOpenProfile,
 }: AppHeaderProps) {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -123,6 +125,19 @@ export default function AppHeader({
                   {username}
                 </Typography>
               </Box>
+              {onOpenProfile && (
+                <MenuItem
+                  onClick={() => {
+                    setMenuAnchor(null);
+                    onOpenProfile();
+                  }}
+                >
+                  <ListItemIcon>
+                    <PersonOutlined fontSize="small" />
+                  </ListItemIcon>
+                  Profile
+                </MenuItem>
+              )}
               <MenuItem
                 onClick={() => {
                   setMenuAnchor(null);

@@ -4,10 +4,13 @@ import com.bot.botback.model.ChatMessage;
 import com.bot.botback.model.Sender;
 import com.bot.botback.repository.ChatMessageRepository;
 import com.bot.botback.repository.ReminderRepository;
+import com.bot.botback.repository.UserRepository;
+import com.bot.botback.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -16,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,6 +35,7 @@ class PromptBuilderTest {
     private MemoryService memoryService;
     private ChatMessageRepository chatRepository;
     private ListService listService;
+    private UserRepository userRepository;
     private PromptBuilder builder;
 
     @BeforeEach
@@ -38,7 +43,9 @@ class PromptBuilderTest {
         memoryService = Mockito.mock(MemoryService.class);
         chatRepository = Mockito.mock(ChatMessageRepository.class);
         listService = Mockito.mock(ListService.class);
-        builder = new PromptBuilder(memoryService, Mockito.mock(ReminderRepository.class), chatRepository, listService);
+        userRepository = Mockito.mock(UserRepository.class);
+        builder = new PromptBuilder(memoryService, Mockito.mock(ReminderRepository.class), chatRepository, listService,
+                userRepository);
     }
 
     private static ChatMessage message(Sender sender, String content) {
@@ -82,6 +89,19 @@ class PromptBuilderTest {
 
         assertTrue(prompt.contains("- Squat max is 120 kg"));
         assertFalse(prompt.contains("] Squat max is 120 kg"), "not repeated among the dated memories");
+    }
+
+    @Test
+    void includesTheNameAndBirthdayFromTheirProfilePage() {
+        User user = new User();
+        user.setDisplayName("Lena");
+        user.setBirthday(LocalDate.of(1996, 10, 24));
+        when(userRepository.findById(USER)).thenReturn(Optional.of(user));
+
+        String prompt = builder.systemPrompt(USER, "hi", List.of(), ATHENS);
+
+        assertTrue(prompt.contains("- Goes by: Lena"));
+        assertTrue(prompt.contains("- Birthday: 24 October 1996"));
     }
 
     @Test

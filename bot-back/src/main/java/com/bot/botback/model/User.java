@@ -34,6 +34,13 @@ public class User {
     @Column(name = "last_checkin_on")
     private LocalDate lastCheckinOn;
 
+    /** What RoboFriend calls them; the username when not set. */
+    @Column(name = "display_name", length = 50)
+    private String displayName;
+
+    @Column(name = "birthday")
+    private LocalDate birthday;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 

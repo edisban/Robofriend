@@ -124,9 +124,13 @@ public class CheckInService {
                         })
                         .collect(Collectors.joining("\n"));
 
-        String stats = memoryService.profileFacts(userId).stream()
-                .map(m -> "- " + m.fact())
-                .collect(Collectors.joining("\n"));
+        List<String> profile = new ArrayList<>();
+        userRepository.findById(userId).ifPresent(user -> profile.addAll(ProfileService.describe(user, today)));
+        memoryService.profileFacts(userId).forEach(m -> profile.add(m.fact()));
+        // The name they chose is user-written, so it can't carry the reply marker.
+        String stats = ReplySplitter.neutralize(profile.stream()
+                .map(line -> "- " + line)
+                .collect(Collectors.joining("\n")));
         String lists = listService.openItems(userId).entrySet().stream()
                 .map(e -> e.getKey() + ": " + String.join(", ", e.getValue()))
                 .collect(Collectors.joining("\n"));
@@ -140,6 +144,7 @@ public class CheckInService {
 
                 Decide whether a good friend would text them first right now about something SPECIFIC
                 that matters today:
+                - their own birthday today (see their profile below): always wish them a happy birthday
                 - an event today or tomorrow (birthday, exam, trip, appointment, party, game, interview)
                 - following up on something that happened in the last day or two ("how did the exam go?")
                 - their reminders for today/tomorrow

@@ -10,6 +10,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Date;
+import java.util.Optional;
 
 /** Issues and checks the short-lived access tokens kept in the HttpOnly access cookie. */
 @Component
@@ -53,18 +54,28 @@ public class JwtUtil {
         return accessTokenTtl;
     }
 
-    public String generate(String username) {
+    /**
+     * An access token for the user. The subject is the user id, not the username: ids are never
+     * reused, so a token can't outlive a deleted account and sign in to a new one with the same name.
+     */
+    public String generate(Long userId) {
         return Jwts.builder()
-                .subject(username)
+                .subject(String.valueOf(userId))
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenTtl.toMillis()))
                 .signWith(key)
                 .compact();
     }
 
-    public String extractUsername(String token) {
-        return Jwts.parser().verifyWith(key).build()
+    /** The user id in a valid token; empty for tokens from before ids were used (they held a username). */
+    public Optional<Long> extractUserId(String token) {
+        String subject = Jwts.parser().verifyWith(key).build()
                 .parseSignedClaims(token).getPayload().getSubject();
+        try {
+            return Optional.of(Long.parseLong(subject));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     public boolean isValid(String token) {
