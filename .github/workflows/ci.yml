@@ -20,7 +20,7 @@ jobs:
           cache-dependency-path: bot-front/package-lock.json
       - name: Build frontend
         working-directory: bot-front
-        run: npm ci && npm run lint && npm run build
+        run: npm ci && npm run lint && npm test && npm run build
 
       # Browser tests of the main flows; the API is faked in the browser, so no backend is needed.
       - name: Browser tests (Playwright)
