@@ -49,6 +49,30 @@ stats, reminders, lists and recent messages, builds one prompt and streams Groq'
 The model's output ends with a hidden JSON part (after `###META###`) listing facts to remember, a reminder
 and list changes, which the backend saves.
 
+### Why one model call with a hidden JSON part
+
+The reply and the data to save come from **one** streamed call. The backend shows the text before the
+marker as it arrives and never sends what follows it.
+
+That JSON is model output, and the model can be talked into writing anything, so it's treated as untrusted:
+
+- Only known fields with the right types are read. Lists and strings have size limits.
+- Reminders need a real date with a UTC offset, from now to two years ahead.
+- If the marker appears more than once, only the last block counts.
+- Anything the user wrote (their message, the history, memories, list items) has the marker broken up
+  before it goes into the prompt.
+- A bad block is ignored and the chat goes on.
+
+At worst, someone who tricks the model can change only their own facts, reminders and lists.
+
+Alternatives we looked at:
+
+| Option | Gain | Why not (yet) |
+| --- | --- | --- |
+| Tool calling (`tools` in the Groq API) | The data comes in its own channel, with typed arguments | Mixing streamed text with tool calls differs between models, and the client gets more complex. This is the first thing to switch to if the marker causes trouble. |
+| Structured outputs / JSON mode | The reply is always valid JSON | The whole answer becomes JSON, so the text can't be streamed word by word |
+| A second extraction call | Clean separation; a smaller, cheaper model could do it | Twice the calls (cost, rate limits) and more delay before a reminder is saved |
+
 ## Run it
 
 Requirements: Docker with Docker Compose, and a [Groq](https://console.groq.com) API key.

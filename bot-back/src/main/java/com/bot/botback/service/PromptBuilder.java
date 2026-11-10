@@ -162,8 +162,14 @@ public class PromptBuilder {
                 - Only create a reminder when they ask to be reminded or clearly schedule something; then set
                   hasReminder=true, a short title (e.g. "Call mom") and targetDateTime in ISO 8601 with their
                   UTC offset (e.g. 2026-11-06T09:00:00+02:00), interpreting times in their local timezone.
-                """.formatted(localNow, profileContext, memoryContext, remindersContext, listsContext(userId),
-                recentConversation(userId, userMessage), ReplySplitter.META_MARKER)
+                """.formatted(localNow,
+                // Everything below comes from what the user wrote, so it can't carry a real marker.
+                ReplySplitter.neutralize(profileContext),
+                ReplySplitter.neutralize(memoryContext),
+                ReplySplitter.neutralize(remindersContext),
+                ReplySplitter.neutralize(listsContext(userId)),
+                ReplySplitter.neutralize(recentConversation(userId, userMessage)),
+                ReplySplitter.META_MARKER)
                 + languageDirective(userMessage);
     }
 

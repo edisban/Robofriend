@@ -17,6 +17,14 @@ final class ReplySplitter {
     private final StringBuilder pending = new StringBuilder();
     private boolean inMeta;
 
+    /**
+     * Breaks up any marker inside text that goes into the prompt (what the user wrote, memories,
+     * list items...), so it can't be mistaken for, or copied into, the model's real marker.
+     */
+    static String neutralize(String text) {
+        return text == null ? null : text.replace(META_MARKER, "#META#");
+    }
+
     ReplySplitter(Consumer<String> onToken) {
         this.onToken = onToken;
     }

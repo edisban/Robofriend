@@ -53,7 +53,7 @@ public class AiService {
             List<MemoryService.Memory> memories = memoryService.searchMemories(userId, userMessage, 5);
             List<Map<String, String>> messages = List.of(
                     Map.of("role", "system", "content", promptBuilder.systemPrompt(userId, userMessage, memories, zone)),
-                    Map.of("role", "user", "content", userMessage));
+                    Map.of("role", "user", "content", ReplySplitter.neutralize(userMessage)));
             groqClient.stream(messages, 0.8, splitter);
 
             String reply = splitter.reply().trim();
@@ -85,7 +85,7 @@ public class AiService {
                     "%s"
                     Text them a short, warm, casual nudge about it (max 20 words), like a friend would.
                     Start with ⏰. Write in the same language as the reminder. Output only the message.
-                    """.formatted(title), 0.9);
+                    """.formatted(ReplySplitter.neutralize(title)), 0.9);
             if (!text.isEmpty()) {
                 return text;
             }
