@@ -3,6 +3,7 @@ import {
   Avatar,
   Box,
   Button,
+  ButtonBase,
   Chip,
   Dialog,
   DialogActions,
@@ -27,6 +28,8 @@ type AppHeaderProps = {
   onToggleTheme: () => void;
   onLogout?: () => void;
   onOpenProfile?: () => void;
+  /** Clicking the logo goes back to the conversation; not set when signed out. */
+  onGoHome?: () => void;
 };
 
 export default function AppHeader({
@@ -35,6 +38,7 @@ export default function AppHeader({
   onToggleTheme,
   onLogout,
   onOpenProfile,
+  onGoHome,
 }: AppHeaderProps) {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -58,20 +62,35 @@ export default function AppHeader({
           borderWidth: { xs: "0 0 1px 0", sm: 1 },
         })}
       >
-        <FriendAvatar size={30} />
-        <Typography
+        {/* The logo takes you back to the conversation (a plain logo when signed out). */}
+        <ButtonBase
+          onClick={onGoHome}
+          disabled={!onGoHome}
+          aria-label={onGoHome ? "RoboFriend, back to the conversation" : undefined}
           sx={{
-            fontWeight: 800,
-            fontSize: 19,
-            letterSpacing: -0.5,
-            background: ACCENT_GRADIENT,
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            color: "transparent",
+            gap: 1.5,
+            borderRadius: "999px",
+            pr: 1,
+            "&.Mui-disabled": { pointerEvents: "none" },
+            "&:focus-visible": { outline: (t) => `2px solid ${t.palette.primary.main}`, outlineOffset: 2 },
           }}
         >
-          RoboFriend
-        </Typography>
+          <FriendAvatar size={30} />
+          <Typography
+            component="span"
+            sx={{
+              fontWeight: 800,
+              fontSize: 19,
+              letterSpacing: -0.5,
+              background: ACCENT_GRADIENT,
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+            }}
+          >
+            RoboFriend
+          </Typography>
+        </ButtonBase>
         <Chip
           label="your AI friend"
           size="small"

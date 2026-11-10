@@ -30,6 +30,17 @@ test("edits the name and birthday on the profile page", async ({ page }) => {
   await expect(page.getByTestId("conversation")).toBeVisible();
 });
 
+test("the logo in the header goes back to the conversation", async ({ page }) => {
+  await fakeApi(page, { signedInAs: "eleni", history: conversation(2) });
+  await page.goto("/");
+  await openProfile(page);
+
+  await page.getByRole("button", { name: /back to the conversation/ }).click();
+
+  await expect(page.getByTestId("conversation")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your profile" })).toBeHidden();
+});
+
 test("deleting the account asks if you're sure and needs the password", async ({ page }) => {
   const requests = await fakeApi(page, { signedInAs: "eleni", history: conversation(2) });
   await page.goto("/");

@@ -215,6 +215,7 @@ function App() {
           onToggleTheme={() => setDarkMode((prev) => !prev)}
           onLogout={handleLogout}
           onOpenProfile={() => setScreen("profile")}
+          onGoHome={currentUser && screen !== "login" ? () => setScreen("chat") : undefined}
         />
         <Box
           component="main"
