@@ -79,7 +79,7 @@ class ListServiceTest {
     void addingSkipsOpenDuplicatesButNotDoneOnes() {
         apply(ListService.Op.ADD, "shopping", "Καφές");
         apply(ListService.Op.ADD, "shopping", "καφες", "- tea ");
-        assertEquals(List.of("Καφές", "tea"), stored.stream().map(ListItem::getText).toList(),
+        assertEquals(List.of("Καφές", "tea"), stored.stream().map(i -> i.getText()).toList(),
                 "same item in other accents/case isn't added twice; list markers are trimmed");
 
         apply(ListService.Op.DONE, "shopping", "καφές");
@@ -92,10 +92,10 @@ class ListServiceTest {
         apply(ListService.Op.ADD, "shopping", "milk", "eggs", "bread");
 
         apply(ListService.Op.REMOVE, "shopping", "EGGS");
-        assertEquals(List.of("milk", "bread"), stored.stream().map(ListItem::getText).toList());
+        assertEquals(List.of("milk", "bread"), stored.stream().map(i -> i.getText()).toList());
 
         service.apply(USER, List.of(new ListService.ListOp(ListService.Op.CLEAR, "shopping", List.of())));
-        assertTrue(stored.stream().allMatch(ListItem::isDone));
+        assertTrue(stored.stream().allMatch(i -> i.isDone()));
     }
 
     @Test

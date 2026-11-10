@@ -1,6 +1,5 @@
 package com.bot.botback.service;
 
-import com.bot.botback.model.MemoryVault;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -104,7 +103,7 @@ class MemorySearchIntegrationTest {
         List<MemoryService.Memory> found = memoryService.searchMemories(alice, "tell me about my pet", 5);
 
         assertEquals(List.of("Has a cat called Miso", "Loves hiking", "Works as a nurse"),
-                found.stream().map(MemoryService.Memory::fact).toList(), "only Alice's facts, nearest first");
+                found.stream().map(m -> m.fact()).toList(), "only Alice's facts, nearest first");
         assertNotNull(found.get(0).savedAt());
     }
 
@@ -140,7 +139,7 @@ class MemorySearchIntegrationTest {
         // user_id index and ranks them exactly, rather than walking the (approximate) HNSW graph.
         assertTrue(plan(query).contains("idx_memory_vault_user"), plan(query));
         assertEquals(List.of("Alice nearest", "Alice second", "Alice third"),
-                memoryService.searchByVector(alice, query, 5).stream().map(MemoryVault::getFact).toList());
+                memoryService.searchByVector(alice, query, 5).stream().map(m -> m.getFact()).toList());
     }
 
     @Test
@@ -155,7 +154,7 @@ class MemorySearchIntegrationTest {
 
             // HNSW is approximate, so only check it returns Alice's facts, nearest first.
             List<String> found = memoryService.searchByVector(alice, query, 5).stream()
-                    .map(MemoryVault::getFact).toList();
+                    .map(m -> m.getFact()).toList();
             assertTrue(!found.isEmpty() && found.stream().allMatch(f -> f.startsWith("Alice")), found.toString());
             List<String> inOrder = List.of("Alice nearest", "Alice second", "Alice third").stream()
                     .filter(found::contains).toList();
@@ -172,7 +171,7 @@ class MemorySearchIntegrationTest {
         memoryService.ingestFact(alice, "Has a cat", null);
 
         assertEquals(List.of("Squat max is 120 kg"),
-                memoryService.profileFacts(alice).stream().map(MemoryService.Memory::fact).toList());
+                memoryService.profileFacts(alice).stream().map(m -> m.fact()).toList());
         assertEquals(2, jdbc.queryForObject(
                 "select count(*) from memory_vault where user_id = ? and embedding is not null", Integer.class, alice));
     }

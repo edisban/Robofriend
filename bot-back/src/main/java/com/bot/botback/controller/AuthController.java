@@ -95,7 +95,7 @@ public class AuthController {
         }
         Optional<User> found = userRepository.findByUsername(username);
         // Check a password even for unknown usernames, so the response time doesn't reveal which exist.
-        String hash = found.map(User::getPasswordHash).orElseGet(this::dummyHash);
+        String hash = found.map(u -> u.getPasswordHash()).orElseGet(this::dummyHash);
         boolean matches = passwordEncoder.matches(req.getPassword(), hash);
         if (found.isEmpty() || !matches) {
             rateLimiter.recordFailedLogin(ip, username);
