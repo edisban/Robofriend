@@ -1,7 +1,10 @@
+# One project, whatever the folder is called: containers robofriend-*, volume robofriend_pgdata.
+name: robofriend
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: bot_postgres
+    container_name: robofriend-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: botdb
@@ -20,7 +23,7 @@ services:
 
   db-migrate:
     image: postgres:16-alpine
-    container_name: bot_db_migrate
+    container_name: robofriend-db-migrate
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,7 +41,7 @@ services:
 
   backend:
     build: ./bot-back
-    container_name: bot_backend
+    container_name: robofriend-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -68,7 +71,7 @@ services:
 
   frontend:
     build: ./bot-front
-    container_name: bot_frontend
+    container_name: robofriend-frontend
     restart: unless-stopped
     env_file:
       - .env
@@ -80,7 +83,7 @@ services:
 
   ai-memory-service:
     build: ./ai-memory-service
-    container_name: bot_ai_memory
+    container_name: robofriend-ai-memory
     restart: unless-stopped
     env_file:
       - .env
