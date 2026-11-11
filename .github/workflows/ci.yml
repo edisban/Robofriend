@@ -22,10 +22,20 @@ jobs:
         working-directory: bot-front
         run: npm ci && npm run lint && npm test && npm run build
 
-      # Browser tests of the main flows; the API is faked in the browser, so no backend is needed.
+  # Browser tests of the main flows; the API is faked in the browser, so no backend is needed.
+  # The official Playwright image already has the browsers and their system libraries, so nothing is
+  # installed with apt (which fails whenever the Ubuntu mirrors are unreachable).
+  # Keep the image tag equal to the @playwright/test version in bot-front/package.json.
+  e2e:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@v5
       - name: Browser tests (Playwright)
         working-directory: bot-front
-        run: npx playwright install --with-deps chromium && npm run test:e2e
+        run: npm ci && npm run test:e2e
 
       - name: Upload Playwright report
         if: failure()
