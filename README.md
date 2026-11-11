@@ -29,11 +29,24 @@ https://github.com/user-attachments/assets/1f5f3eb1-01d7-4df6-9432-7f546a30ce33
 
 ## Architecture
 
-```
-Browser (React) → nginx → Spring Boot API → Groq (LLM, streamed)
-                                 │        → Embedding service (Python, text → vector)
-                                 ↓
-                        PostgreSQL + pgvector
+```mermaid
+flowchart LR
+    browser["Browser<br/>React 19 + TypeScript"]
+
+    subgraph compose["Docker Compose"]
+        nginx["nginx<br/>serves the app,<br/>proxies /api"]
+        api["Spring Boot API<br/>auth · prompts · streaming<br/>reminders · lists"]
+        embed["Embedding service<br/>Python · FastAPI<br/>stateless"]
+        db[("PostgreSQL 16<br/>+ pgvector")]
+    end
+
+    groq["Groq LLM"]
+
+    browser -- "HTTPS · HttpOnly cookies" --> nginx
+    nginx -- "/api" --> api
+    api -- "text → 384-dim vector" --> embed
+    api -- "JPA · SQL · vector search" --> db
+    api -- "one streamed call" --> groq
 ```
 
 | Folder | Tech | What it does |
@@ -42,17 +55,51 @@ Browser (React) → nginx → Spring Boot API → Groq (LLM, streamed)
 | `bot-back/` | Spring Boot 4, Java 17, Spring Security, JPA, Flyway | API, sign-in, prompts, streaming, reminders. The only service that uses the database. |
 | `ai-memory-service/` | Python, FastAPI, sentence-transformers | Turns text into 384-dimension vectors. Stateless; it has no database. |
 
-**How a message is handled:** the backend gathers related memories (pgvector cosine search), reminders,
-lists and recent messages. It builds one prompt and streams Groq's reply to the browser as Server-Sent
-Events. After a `###META###` marker, the model also writes a JSON block with facts, reminders and list
-changes to save. That block is never shown to the user and is checked strictly before anything is saved.
+### How a message is handled
 
-**Reliability:**
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant A as Spring Boot
+    participant E as Embedding service
+    participant D as PostgreSQL
+    participant G as Groq
+
+    B->>A: POST /api/chat/stream
+    A->>A: Check the rate limit
+    A->>E: Embed the message
+    E-->>A: Vector
+    A->>D: Related memories, reminders, lists, recent messages
+    A->>G: One prompt (streamed)
+    G-->>A: Reply tokens, then ###META### and a JSON block
+    A-->>B: Server-Sent Events with the reply only
+    A->>A: Validate the JSON strictly
+    A->>D: Save the turn, facts, reminders and list changes
+```
+
+The model writes the reply first and the data to save after a `###META###` marker, so one call does
+both. The JSON block is never shown to the user, and text written by users can't add a fake marker.
+
+### Reliability
+
 - Each due reminder is claimed with one atomic database update, so it is sent once even with several
   backend instances.
 - If the embedding service is down, chat keeps working without memory search. New facts are saved anyway
   and get their vectors in the background.
 - If the AI can't be reached, the user gets a short friendly message instead of an error.
+
+### Design choices
+
+| Choice | Why |
+| --- | --- |
+| SSE instead of WebSockets | The stream only goes one way (server → browser) and works over plain HTTP. |
+| One AI call instead of two | Half the latency and cost; the hidden JSON is validated before use. |
+| pgvector instead of a vector database | Memories live next to the rest of the data, in one transaction and one backup. |
+| A separate Python service for embeddings | The best embedding libraries are in Python, and it scales on its own. |
+| Cookies instead of localStorage | HttpOnly cookies can't be read by injected scripts. CSRF tokens cover the rest. |
+| Flyway | Every schema change is a versioned migration; Hibernate only validates. |
+| Polling instead of push | Simple and enough for now. Push will come with the mobile app. |
 
 ## Run it
 
@@ -86,7 +133,7 @@ and open http://localhost:5174.
 | --- | --- |
 | `cd bot-back && ./mvnw test` | Unit, web-layer and integration tests against a real PostgreSQL (Testcontainers, needs Docker) |
 | `cd bot-front && npm test` | Unit tests (Vitest, React Testing Library) |
-| `cd bot-front && npm run test:e2e` | Browser tests (Playwright) with a faked API |
+| `cd bot-front && npm run test:e2e` | Browser tests (Playwright) with a faked API, on desktop and mobile |
 
 GitHub Actions runs all three on every push.
 
@@ -98,5 +145,5 @@ GitHub Actions runs all three on every push.
   token that is replaced every time it's used.
 - Every request that changes data needs a CSRF token.
 - Sign-in, account deletion and AI replies are rate-limited. Deleting an account needs the password.
-- The model's hidden JSON is validated before anything is saved, and text written by users can't add a
-  fake `###META###` marker.
+- The model's hidden JSON is validated before anything is saved: sizes, dates and list operations are
+  all checked.
