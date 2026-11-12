@@ -10,8 +10,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Produces RoboFriend's replies: builds the prompt, streams the answer from Groq and saves what it
- * learned. When the AI can't be reached, it says so in a short message.
+ * Produces RoboFriend's replies: builds the prompt, streams the answer from Groq and, in a second
+ * small call, saves what it learned. When the AI can't be reached, it says so in a short message.
  */
 @Service
 public class AiService {
@@ -34,46 +34,63 @@ public class AiService {
         this.extraction = extraction;
     }
 
+    /** A reply and whether the model wrote it (as opposed to a fallback message when the AI is down). */
+    public record Reply(String text, boolean fromModel) {
+    }
+
     /**
      * Generates RoboFriend's reply, pushing it to {@code onToken} piece by piece as the model writes it.
-     *
-     * @param remember whether to save facts, reminders and list changes from this turn (false when
-     *                 regenerating, so the same reminder isn't created twice)
-     * @return the complete reply text
+     * Saving what it learned from the turn is a separate step: {@link #rememberTurn}.
      */
-    public String generateReply(Long userId, String userMessage, ZoneId zone,
-                                Consumer<String> onToken, boolean remember) {
+    public Reply generateReply(Long userId, String userMessage, ZoneId zone, Consumer<String> onToken) {
         if (!groqClient.isConfigured()) {
             onToken.accept(AI_UNAVAILABLE);
-            return AI_UNAVAILABLE;
+            return new Reply(AI_UNAVAILABLE, false);
         }
 
-        ReplySplitter splitter = new ReplySplitter(onToken);
+        StreamedReply streamed = new StreamedReply(onToken);
         try {
             List<MemoryService.Memory> memories = memoryService.searchMemories(userId, userMessage, 5);
             List<Map<String, String>> messages = List.of(
                     Map.of("role", "system", "content", promptBuilder.systemPrompt(userId, userMessage, memories, zone)),
-                    Map.of("role", "user", "content", ReplySplitter.neutralize(userMessage)));
-            groqClient.stream(messages, 0.8, splitter);
+                    Map.of("role", "user", "content", userMessage));
+            groqClient.stream(messages, 0.8, streamed);
 
-            String reply = splitter.reply().trim();
+            String reply = streamed.text().trim();
             if (reply.isEmpty()) {
                 throw new IllegalStateException("Model returned an empty reply");
             }
-            if (remember) {
-                extraction.persist(userId, extraction.parseMeta(splitter.meta()));
-            }
-            return reply;
+            return new Reply(reply, true);
         } catch (Exception e) {
             log.warn("Reply generation failed for user {}: {}", userId, e.getMessage());
-            if (splitter.emittedAny()) {
+            if (streamed.emittedAny()) {
                 // Part of the answer already reached the user; keep it rather than swapping in an error.
-                return splitter.reply().trim();
+                return new Reply(streamed.text().trim(), true);
             }
             boolean rateLimited = e instanceof GroqClient.GroqHttpException http && http.status == 429;
             String reply = rateLimited ? AI_BUSY : AI_UNAVAILABLE;
             onToken.accept(reply);
-            return reply;
+            return new Reply(reply, false);
+        }
+    }
+
+    /**
+     * Saves the facts, reminders and list changes from one chat turn. A second, small model call
+     * reads the turn and answers in a strict JSON schema; it runs after the user has the reply, so
+     * it doesn't slow the chat down. If it fails, the turn just isn't remembered; it never throws.
+     */
+    public void rememberTurn(Long userId, String userMessage, String reply, ZoneId zone) {
+        if (!groqClient.isConfigured()) {
+            return;
+        }
+        try {
+            String json = groqClient.completeJson(List.of(
+                            Map.of("role", "system", "content", promptBuilder.extractionPrompt(userId, zone)),
+                            Map.of("role", "user", "content", promptBuilder.extractionInput(userId, userMessage, reply))),
+                    "chat_turn_extraction", ReplyExtraction.SCHEMA);
+            extraction.persist(userId, extraction.parse(json));
+        } catch (Exception e) {
+            log.warn("Could not save what was learned from a turn of user {}: {}", userId, e.getMessage());
         }
     }
 
@@ -85,7 +102,7 @@ public class AiService {
                     "%s"
                     Text them a short, warm, casual nudge about it (max 20 words), like a friend would.
                     Start with ⏰. Write in the same language as the reminder. Output only the message.
-                    """.formatted(ReplySplitter.neutralize(title)), 0.9);
+                    """.formatted(title), 0.9);
             if (!text.isEmpty()) {
                 return text;
             }

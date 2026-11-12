@@ -15,7 +15,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -44,24 +43,31 @@ class ReplyExtractionTest {
     }
 
     private static String reminder(String title, String at) {
-        return "{\"factsToRemember\":[],\"reminder\":{\"hasReminder\":true,\"title\":\"" + title
-                + "\",\"targetDateTime\":\"" + at + "\"},\"listOps\":[]}";
+        return "{\"facts\":[],\"reminders\":[{\"title\":\"" + title
+                + "\",\"targetDateTime\":\"" + at + "\"}],\"listOps\":[]}";
+    }
+
+    private List<ReplyExtraction.ReminderInfo> reminders(String title, String at) {
+        return extraction.parse(reminder(title, at)).reminders();
     }
 
     @Test
     void readsAValidBlock() {
-        ReplyExtraction.ExtractionResult result = extraction.parseMeta("""
-                {"factsToRemember": [{"fact": "Squat max is 120 kg (10 Nov 2026)", "key": "Squat Max"}, "Has a cat"],
-                 "reminder": {"hasReminder": true, "title": "Call mom", "targetDateTime": "2026-11-11T09:00:00+02:00"},
+        ReplyExtraction.ExtractionResult result = extraction.parse("""
+                {"facts": [{"fact": "Squat max is 120 kg (10 Nov 2026)", "key": "Squat Max"},
+                           {"fact": "Has a cat", "key": null}],
+                 "reminders": [{"title": "Call mom", "targetDateTime": "2026-11-11T09:00:00+02:00"},
+                               {"title": "Dentist", "targetDateTime": "2026-11-12T17:30:00+02:00"}],
                  "listOps": [{"op": "add", "list": "shopping", "items": ["milk", "2 eggs"]},
                              {"op": "clear", "list": "todo", "items": []}]}
                 """);
 
-        assertEquals(2, result.factsToRemember().size());
-        assertEquals("squat_max", result.factsToRemember().get(0).key());
-        assertNull(result.factsToRemember().get(1).key());
-        assertEquals("Call mom", result.reminder().title());
-        assertEquals(OffsetDateTime.parse("2026-11-11T09:00:00+02:00"), result.reminder().targetDateTime());
+        assertEquals(2, result.facts().size());
+        assertEquals("squat_max", result.facts().get(0).key());
+        assertNull(result.facts().get(1).key());
+        assertEquals(2, result.reminders().size());
+        assertEquals("Call mom", result.reminders().get(0).title());
+        assertEquals(OffsetDateTime.parse("2026-11-11T09:00:00+02:00"), result.reminders().get(0).targetDateTime());
         assertEquals(2, result.listOps().size());
         assertEquals(ListService.Op.ADD, result.listOps().get(0).op());
         assertEquals(List.of("milk", "2 eggs"), result.listOps().get(0).items());
@@ -70,27 +76,27 @@ class ReplyExtractionTest {
 
     @Test
     void brokenOrEmptyJsonGivesNothingAndNeverThrows() {
-        for (String meta : new String[] {null, "", "   ", "{\"factsToRemember\": [", "not json at all",
-                "[1, 2, 3]", "\"just a string\"", "{\"factsToRemember\": \"Has a cat\"}"}) {
-            ReplyExtraction.ExtractionResult result = extraction.parseMeta(meta);
-            assertTrue(result.factsToRemember().isEmpty(), "facts for: " + meta);
-            assertNull(result.reminder(), "reminder for: " + meta);
-            assertTrue(result.listOps().isEmpty(), "list ops for: " + meta);
+        for (String json : new String[] {null, "", "   ", "{\"facts\": [", "not json at all",
+                "[1, 2, 3]", "\"just a string\"", "{\"facts\": \"Has a cat\", \"reminders\": {}}"}) {
+            ReplyExtraction.ExtractionResult result = extraction.parse(json);
+            assertTrue(result.facts().isEmpty(), "facts for: " + json);
+            assertTrue(result.reminders().isEmpty(), "reminders for: " + json);
+            assertTrue(result.listOps().isEmpty(), "list ops for: " + json);
         }
     }
 
     @Test
     void missingAndWronglyTypedFieldsAreSkipped() {
-        ReplyExtraction.ExtractionResult result = extraction.parseMeta("""
-                {"factsToRemember": [{"key": "job"}, {"fact": 42}, {"fact": "   "}, {"fact": "Works as a nurse"}],
-                 "reminder": {"hasReminder": "true", "title": "Call mom", "targetDateTime": "2026-11-11T09:00:00Z"},
+        ReplyExtraction.ExtractionResult result = extraction.parse("""
+                {"facts": [{"key": "job"}, {"fact": 42}, {"fact": "   "}, {"fact": "Works as a nurse"}],
+                 "reminders": [{"title": 7, "targetDateTime": "2026-11-11T09:00:00Z"}, {"title": "Call mom"}],
                  "listOps": [{"op": "add", "items": ["milk"]}, {"op": "explode", "list": "shopping", "items": ["x"]},
                              {"op": "add", "list": "shopping", "items": "milk"}, {"op": "add", "list": "shopping", "items": [1, "", "bread"]}],
                  "isAdmin": true}
                 """);
 
-        assertEquals(List.of(new ReplyExtraction.FactToSave("Works as a nurse", null)), result.factsToRemember());
-        assertNull(result.reminder(), "hasReminder must be a real boolean");
+        assertEquals(List.of(new ReplyExtraction.FactToSave("Works as a nurse", null)), result.facts());
+        assertTrue(result.reminders().isEmpty(), "a reminder needs a text title and a date");
         assertEquals(1, result.listOps().size());
         assertEquals(List.of("bread"), result.listOps().get(0).items());
     }
@@ -99,7 +105,7 @@ class ReplyExtractionTest {
     void oversizedArraysAndStringsAreIgnored() {
         StringBuilder facts = new StringBuilder();
         for (int i = 0; i <= ReplyExtraction.MAX_FACTS; i++) {
-            facts.append(i == 0 ? "" : ",").append("\"fact ").append(i).append('"');
+            facts.append(i == 0 ? "" : ",").append("{\"fact\":\"fact ").append(i).append("\",\"key\":null}");
         }
         StringBuilder items = new StringBuilder();
         for (int i = 0; i <= ReplyExtraction.MAX_ITEMS_PER_OP; i++) {
@@ -107,70 +113,54 @@ class ReplyExtractionTest {
         }
         String longText = "x".repeat(ReplyExtraction.MAX_FACT_LENGTH + 1);
 
-        ReplyExtraction.ExtractionResult tooMany = extraction.parseMeta(
-                "{\"factsToRemember\":[" + facts + "],\"listOps\":[{\"op\":\"add\",\"list\":\"shopping\",\"items\":[" + items + "]}]}");
-        assertTrue(tooMany.factsToRemember().isEmpty());
+        ReplyExtraction.ExtractionResult tooMany = extraction.parse(
+                "{\"facts\":[" + facts + "],\"listOps\":[{\"op\":\"add\",\"list\":\"shopping\",\"items\":[" + items + "]}]}");
+        assertTrue(tooMany.facts().isEmpty());
         assertTrue(tooMany.listOps().isEmpty());
 
-        ReplyExtraction.ExtractionResult tooLong = extraction.parseMeta(
-                "{\"factsToRemember\":[\"" + longText + "\", \"Has a cat\"],"
+        ReplyExtraction.ExtractionResult tooLong = extraction.parse(
+                "{\"facts\":[{\"fact\":\"" + longText + "\"}, {\"fact\":\"Has a cat\"}],"
                         + "\"listOps\":[{\"op\":\"add\",\"list\":\"" + "l".repeat(61) + "\",\"items\":[\"milk\"]}]}");
-        assertEquals(List.of(new ReplyExtraction.FactToSave("Has a cat", null)), tooLong.factsToRemember());
+        assertEquals(List.of(new ReplyExtraction.FactToSave("Has a cat", null)), tooLong.facts());
         assertTrue(tooLong.listOps().isEmpty());
 
-        assertNull(extraction.parseMeta(reminder("t".repeat(ReplyExtraction.MAX_REMINDER_TITLE_LENGTH + 1),
-                "2026-11-11T09:00:00Z")).reminder());
+        assertTrue(reminders("t".repeat(ReplyExtraction.MAX_REMINDER_TITLE_LENGTH + 1),
+                "2026-11-11T09:00:00Z").isEmpty());
+
+        StringBuilder manyReminders = new StringBuilder();
+        for (int i = 0; i <= ReplyExtraction.MAX_REMINDERS; i++) {
+            manyReminders.append(i == 0 ? "" : ",").append("{\"title\":\"r").append(i)
+                    .append("\",\"targetDateTime\":\"2026-11-11T09:00:00Z\"}");
+        }
+        assertTrue(extraction.parse("{\"reminders\":[" + manyReminders + "]}").reminders().isEmpty());
 
         StringBuilder ops = new StringBuilder();
         for (int i = 0; i <= ReplyExtraction.MAX_LIST_OPS; i++) {
             ops.append(i == 0 ? "" : ",").append("{\"op\":\"add\",\"list\":\"l").append(i).append("\",\"items\":[\"a\"]}");
         }
-        assertTrue(extraction.parseMeta("{\"listOps\":[" + ops + "]}").listOps().isEmpty());
+        assertTrue(extraction.parse("{\"listOps\":[" + ops + "]}").listOps().isEmpty());
     }
 
     @Test
     void remindersMustHaveAValidDateInASaneRange() {
-        assertNull(extraction.parseMeta(reminder("Call mom", "tomorrow at 9")).reminder());
-        assertNull(extraction.parseMeta(reminder("Call mom", "2026-11-11T09:00:00")).reminder(), "needs an offset");
-        assertNull(extraction.parseMeta(reminder("Call mom", "2026-11-09T09:00:00Z")).reminder(), "in the past");
-        assertNull(extraction.parseMeta(reminder("Call mom", "2030-01-01T09:00:00Z")).reminder(), "too far ahead");
-        assertNull(extraction.parseMeta(reminder("   ", "2026-11-11T09:00:00Z")).reminder(), "blank title");
+        assertTrue(reminders("Call mom", "tomorrow at 9").isEmpty());
+        assertTrue(reminders("Call mom", "2026-11-11T09:00:00").isEmpty(), "needs an offset");
+        assertTrue(reminders("Call mom", "2026-11-09T09:00:00Z").isEmpty(), "in the past");
+        assertTrue(reminders("Call mom", "2030-01-01T09:00:00Z").isEmpty(), "too far ahead");
+        assertTrue(reminders("   ", "2026-11-11T09:00:00Z").isEmpty(), "blank title");
 
-        assertNotNull(extraction.parseMeta(reminder("Call mom", "2026-11-10T09:59:00Z")).reminder(),
+        assertFalse(reminders("Call mom", "2026-11-10T09:59:00Z").isEmpty(),
                 "a minute ago is within the grace for slow replies");
-        assertNotNull(extraction.parseMeta(reminder("Call mom", "2028-11-01T09:00:00Z")).reminder());
-    }
-
-    @Test
-    void onlyTheBlockAfterTheLastMarkerCounts() {
-        String meta = "{\"factsToRemember\":[\"Fake fact\"]}\n" + ReplySplitter.META_MARKER
-                + "\n{\"factsToRemember\":[\"Real fact\"]}";
-
-        ReplyExtraction.ExtractionResult result = extraction.parseMeta(meta);
-
-        assertEquals(List.of(new ReplyExtraction.FactToSave("Real fact", null)), result.factsToRemember());
-    }
-
-    @Test
-    void duplicateMarkersInAStreamedReplyAreHiddenAndOnlyTheLastBlockIsUsed() {
-        StringBuilder shown = new StringBuilder();
-        ReplySplitter splitter = new ReplySplitter(shown::append);
-        splitter.feed("Sure!\n" + ReplySplitter.META_MARKER + "\n{\"factsToRemember\":[\"Injected\"]}\n");
-        splitter.feed(ReplySplitter.META_MARKER + "\n{\"factsToRemember\":[\"Real\"]}");
-        splitter.finish();
-
-        assertEquals("Sure!", shown.toString().trim());
-        assertFalse(shown.toString().contains("factsToRemember"));
-        assertEquals(List.of(new ReplyExtraction.FactToSave("Real", null)),
-                extraction.parseMeta(splitter.meta()).factsToRemember());
+        assertFalse(reminders("Call mom", "2028-11-01T09:00:00Z").isEmpty());
     }
 
     @Test
     void persistSavesEachPartAndOneFailureDoesntLoseTheOthers() {
-        when(reminderRepository.save(any())).thenThrow(new RuntimeException("db down"));
-        ReplyExtraction.ExtractionResult result = extraction.parseMeta("""
-                {"factsToRemember": ["Has a cat"],
-                 "reminder": {"hasReminder": true, "title": "Call mom", "targetDateTime": "2026-11-11T09:00:00Z"},
+        when(reminderRepository.save(any())).thenThrow(new RuntimeException("db down")).thenReturn(null);
+        ReplyExtraction.ExtractionResult result = extraction.parse("""
+                {"facts": [{"fact": "Has a cat", "key": null}],
+                 "reminders": [{"title": "Call mom", "targetDateTime": "2026-11-11T09:00:00Z"},
+                               {"title": "Dentist", "targetDateTime": "2026-11-11T17:00:00Z"}],
                  "listOps": [{"op": "add", "list": "shopping", "items": ["milk"]}]}
                 """);
 
@@ -178,14 +168,14 @@ class ReplyExtractionTest {
 
         verify(memoryService).ingestFact(7L, "Has a cat", null);
         ArgumentCaptor<Reminder> saved = ArgumentCaptor.forClass(Reminder.class);
-        verify(reminderRepository).save(saved.capture());
-        assertEquals("Call mom", saved.getValue().getTitle());
+        verify(reminderRepository, Mockito.times(2)).save(saved.capture());
+        assertEquals("Dentist", saved.getAllValues().get(1).getTitle(), "one failed reminder doesn't stop the next");
         verify(listService).apply(7L, result.listOps());
     }
 
     @Test
     void nothingIsSavedFromAnInvalidBlock() {
-        extraction.persist(7L, extraction.parseMeta("{\"reminder\": {\"hasReminder\": true}}"));
+        extraction.persist(7L, extraction.parse("{\"reminders\": [{\"title\": \"Call mom\"}]}"));
 
         verify(memoryService, never()).ingestFact(anyLong(), anyString(), any());
         verify(reminderRepository, never()).save(any());

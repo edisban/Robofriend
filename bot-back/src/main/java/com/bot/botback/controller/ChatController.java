@@ -102,24 +102,29 @@ public class ChatController {
 
     private void streamReply(SseEmitter emitter, Long userId, ZoneId zone, ChatService.Turn turn) {
         ClientChannel channel = new ClientChannel(emitter);
-        String reply;
+        AiService.Reply reply;
         try {
             reply = aiService.generateReply(userId, turn.message(), zone,
-                    token -> channel.send("token", Map.of("t", token)), turn.remember());
+                    token -> channel.send("token", Map.of("t", token)));
         } catch (Exception e) {
             log.error("Reply generation failed for user {}: {}", userId, e.getMessage());
-            reply = CONNECTION_TROUBLE;
-            channel.send("token", Map.of("t", reply));
+            reply = new AiService.Reply(CONNECTION_TROUBLE, false);
+            channel.send("token", Map.of("t", reply.text()));
         }
         // Saved even if the user closed the tab mid-stream, so it's there next time.
-        ChatMessage saved = chatService.save(userId, Sender.BOT, reply);
+        ChatMessage saved = chatService.save(userId, Sender.BOT, reply.text());
 
         Map<String, Object> done = new HashMap<>();
-        done.put("reply", reply);
+        done.put("reply", reply.text());
         done.put("botMessageId", saved.getId());
         done.put("userMessageId", turn.userMessageId());
         channel.send("done", done);
         emitter.complete();
+
+        // After the user has the whole reply. Not when regenerating, so a reminder isn't created twice.
+        if (turn.remember() && reply.fromModel()) {
+            aiService.rememberTurn(userId, turn.message(), reply.text(), zone);
+        }
     }
 
     /** Called when the app opens: RoboFriend's first message of the day, if it has something to say. */

@@ -71,15 +71,19 @@ sequenceDiagram
     A->>E: Embed the message
     E-->>A: Vector
     A->>D: Related memories, reminders, lists, recent messages
-    A->>G: One prompt (streamed)
-    G-->>A: Reply tokens, then ###META### and a JSON block
-    A-->>B: Server-Sent Events with the reply only
-    A->>A: Validate the JSON strictly
-    A->>D: Save the turn, facts, reminders and list changes
+    A->>G: Reply prompt (streamed)
+    G-->>A: Reply tokens
+    A-->>B: Server-Sent Events, then "done"
+    A->>D: Save the turn
+    A->>G: Extraction call with a strict JSON schema
+    G-->>A: Facts, reminders, list changes
+    A->>A: Check every field
+    A->>D: Save them
 ```
 
-The model writes the reply first and the data to save after a `###META###` marker, so one call does
-both. The JSON block is never shown to the user, and text written by users can't add a fake marker.
+The reply streams as plain text. Once the user has it, a second, small call (about 500 tokens) reads
+the turn and returns what to save. Groq forces that answer into a strict JSON schema, and the backend
+still checks every field before saving anything.
 
 ### Reliability
 
@@ -94,7 +98,7 @@ both. The JSON block is never shown to the user, and text written by users can't
 | Choice | Why |
 | --- | --- |
 | SSE instead of WebSockets | The stream only goes one way (server → browser) and works over plain HTTP. |
-| One AI call instead of two | Half the latency and cost; the hidden JSON is validated before use. |
+| A separate call to extract what to save | The reply stays plain text, the extraction runs after the user has the reply, and its JSON always matches the schema. |
 | pgvector instead of a vector database | Memories live next to the rest of the data, in one transaction and one backup. |
 | A separate Python service for embeddings | The best embedding libraries are in Python, and it scales on its own. |
 | Cookies instead of localStorage | HttpOnly cookies can't be read by injected scripts. CSRF tokens cover the rest. |
@@ -145,5 +149,4 @@ GitHub Actions runs all three on every push.
   token that is replaced every time it's used.
 - Every request that changes data needs a CSRF token.
 - Sign-in, account deletion and AI replies are rate-limited. Deleting an account needs the password.
-- The model's hidden JSON is validated before anything is saved: sizes, dates and list operations are
-  all checked.
+- What the model extracts is checked before anything is saved: sizes, dates and list operations.

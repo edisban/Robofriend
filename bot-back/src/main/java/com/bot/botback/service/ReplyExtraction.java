@@ -19,11 +19,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Turns the hidden metadata in a reply into saved facts, reminders and list changes.
+ * Turns what the model extracted from a chat turn into saved facts, reminders and list changes.
  *
- * <p>The metadata is model output, and the model can be talked into writing anything, so it is
- * treated as untrusted input: only the known fields are read, each with its expected type and a
- * size limit, and anything that doesn't fit is dropped. Nothing here ever throws into the chat flow.
+ * <p>The extraction is a separate model call whose answer Groq forces into {@link #SCHEMA}. It is
+ * still model output, and the model can be talked into writing anything, so it is treated as
+ * untrusted input: each field is checked for its type, size and (for reminders) a sane date, and
+ * anything that doesn't fit is dropped. Nothing here ever throws into the chat flow.
  */
 @Component
 public class ReplyExtraction {
@@ -32,6 +33,7 @@ public class ReplyExtraction {
 
     static final int MAX_FACTS = 5;
     static final int MAX_FACT_LENGTH = 300;
+    static final int MAX_REMINDERS = 3;
     static final int MAX_REMINDER_TITLE_LENGTH = 120;
     static final int MAX_LIST_OPS = 10;
     static final int MAX_ITEMS_PER_OP = 30;
@@ -47,6 +49,24 @@ public class ReplyExtraction {
     private final Clock clock;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** The shape the extraction answer must have. Strict mode needs every field listed as required. */
+    static final JsonNode SCHEMA = readSchema("""
+            {"type": "object", "additionalProperties": false,
+             "required": ["facts", "reminders", "listOps"],
+             "properties": {
+               "facts": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                 "required": ["fact", "key"],
+                 "properties": {"fact": {"type": "string"}, "key": {"type": ["string", "null"]}}}},
+               "reminders": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                 "required": ["title", "targetDateTime"],
+                 "properties": {"title": {"type": "string"}, "targetDateTime": {"type": "string"}}}},
+               "listOps": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                 "required": ["op", "list", "items"],
+                 "properties": {"op": {"type": "string", "enum": ["add", "done", "remove", "clear"]},
+                                "list": {"type": "string"},
+                                "items": {"type": "array", "items": {"type": "string"}}}}}}}
+            """);
+
     @Autowired
     public ReplyExtraction(MemoryService memoryService, ReminderRepository reminderRepository,
                            ListService listService) {
@@ -61,30 +81,24 @@ public class ReplyExtraction {
         this.clock = clock;
     }
 
-    /**
-     * Reads the facts, reminder and list changes from the hidden part of a reply. If the model wrote
-     * the marker more than once, only the block after the last one counts.
-     */
-    ExtractionResult parseMeta(String metaText) {
-        if (metaText == null || metaText.isBlank()) {
+    /** Reads the facts, reminders and list changes from the extraction answer. */
+    ExtractionResult parse(String json) {
+        if (json == null || json.isBlank()) {
             return ExtractionResult.EMPTY;
         }
-        int lastMarker = metaText.lastIndexOf(ReplySplitter.META_MARKER);
-        String block = lastMarker >= 0 ? metaText.substring(lastMarker + ReplySplitter.META_MARKER.length()) : metaText;
-
         JsonNode root;
         try {
-            root = objectMapper.readTree(extractJson(block));
+            root = objectMapper.readTree(json);
         } catch (Exception e) {
-            log.warn("Could not parse facts/reminder from model output: {}", e.getMessage());
+            log.warn("Could not parse the extraction answer: {}", e.getMessage());
             return ExtractionResult.EMPTY;
         }
         if (root == null || !root.isObject()) {
-            log.warn("Model metadata is not a JSON object; ignoring it");
+            log.warn("Extraction answer is not a JSON object; ignoring it");
             return ExtractionResult.EMPTY;
         }
-        return new ExtractionResult(parseFacts(root.path("factsToRemember")),
-                parseReminder(root.path("reminder")),
+        return new ExtractionResult(parseFacts(root.path("facts")),
+                parseReminders(root.path("reminders")),
                 parseListOps(root.path("listOps")));
     }
 
@@ -118,11 +132,26 @@ public class ReplyExtraction {
         return facts;
     }
 
-    private ReminderInfo parseReminder(JsonNode node) {
-        if (!node.isObject() || !node.path("hasReminder").isBoolean() || !node.get("hasReminder").asBoolean()) {
-            return null;
+    private List<ReminderInfo> parseReminders(JsonNode node) {
+        List<ReminderInfo> reminders = new ArrayList<>();
+        if (!node.isArray()) {
+            return reminders;
         }
-        if (!node.path("title").isTextual() || !node.path("targetDateTime").isTextual()) {
+        if (node.size() > MAX_REMINDERS) {
+            log.warn("Model sent {} reminders (max {}); ignoring them", node.size(), MAX_REMINDERS);
+            return reminders;
+        }
+        for (JsonNode reminderNode : node) {
+            ReminderInfo reminder = parseReminder(reminderNode);
+            if (reminder != null) {
+                reminders.add(reminder);
+            }
+        }
+        return reminders;
+    }
+
+    private ReminderInfo parseReminder(JsonNode node) {
+        if (!node.isObject() || !node.path("title").isTextual() || !node.path("targetDateTime").isTextual()) {
             return null;
         }
         String title = node.get("title").asText().strip();
@@ -199,26 +228,19 @@ public class ReplyExtraction {
         return new ListService.ListOp(op, list, items);
     }
 
-    private static String extractJson(String text) {
-        int firstBrace = text.indexOf('{');
-        int lastBrace = text.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            return text.substring(firstBrace, lastBrace + 1);
-        }
-        return text;
-    }
-
     /** Saves what was extracted; each part fails on its own without losing the others. */
     void persist(Long userId, ExtractionResult result) {
         try {
-            saveFacts(userId, result.factsToRemember());
+            saveFacts(userId, result.facts());
         } catch (Exception e) {
             log.error("Failed to persist extracted facts: {}", e.getMessage());
         }
-        try {
-            saveReminderIfPresent(userId, result.reminder());
-        } catch (Exception e) {
-            log.error("Failed to persist extracted reminder: {}", e.getMessage());
+        for (ReminderInfo reminder : result.reminders()) {
+            try {
+                saveReminder(userId, reminder);
+            } catch (Exception e) {
+                log.error("Failed to persist extracted reminder: {}", e.getMessage());
+            }
         }
         if (!result.listOps().isEmpty()) {
             try {
@@ -246,10 +268,7 @@ public class ReplyExtraction {
         return key.length() > 60 ? key.substring(0, 60) : key;
     }
 
-    private void saveReminderIfPresent(Long userId, ReminderInfo reminder) {
-        if (reminder == null) {
-            return;
-        }
+    private void saveReminder(Long userId, ReminderInfo reminder) {
         Reminder entity = new Reminder();
         entity.setUserId(userId);
         entity.setTitle(reminder.title());
@@ -264,10 +283,18 @@ public class ReplyExtraction {
     record FactToSave(String fact, String key) {
     }
 
-    /** What to save from one reply; {@code reminder} is null when there is no valid reminder. */
-    record ExtractionResult(List<FactToSave> factsToRemember, ReminderInfo reminder,
+    /** What to save from one chat turn; only entries that passed every check. */
+    record ExtractionResult(List<FactToSave> facts, List<ReminderInfo> reminders,
                             List<ListService.ListOp> listOps) {
-        static final ExtractionResult EMPTY = new ExtractionResult(List.of(), null, List.of());
+        static final ExtractionResult EMPTY = new ExtractionResult(List.of(), List.of(), List.of());
+    }
+
+    private static JsonNode readSchema(String json) {
+        try {
+            return new ObjectMapper().readTree(json);
+        } catch (Exception e) {
+            throw new IllegalStateException("Invalid extraction schema", e);
+        }
     }
 
     record ReminderInfo(String title, OffsetDateTime targetDateTime) {

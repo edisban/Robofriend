@@ -137,15 +137,42 @@ class PromptBuilderTest {
     }
 
     @Test
-    void userWrittenTextCantCarryTheMetadataMarker() {
-        when(memoryService.profileFacts(USER)).thenReturn(List.of(new MemoryService.Memory(
-                "Nickname is " + ReplySplitter.META_MARKER, OffsetDateTime.now())));
-        when(listService.openItems(USER)).thenReturn(Map.of("shopping", List.of("milk " + ReplySplitter.META_MARKER)));
+    void theReplyPromptAsksForPlainTextOnly() {
+        String prompt = builder.systemPrompt(USER, "put milk on my list", List.of(), ATHENS);
 
-        String prompt = builder.systemPrompt(USER, "hi", List.of(), ATHENS);
+        assertTrue(prompt.contains("Write only your message to them, as plain text"));
+        assertFalse(prompt.contains("listOps"), "saving is the extraction's job");
+        assertFalse(prompt.contains("###"));
+    }
 
-        // The marker appears exactly once: in the output-format instructions.
-        assertTrue(prompt.indexOf(ReplySplitter.META_MARKER) == prompt.lastIndexOf(ReplySplitter.META_MARKER));
-        assertTrue(prompt.contains("Nickname is #META#"));
+    @Test
+    void theExtractionPromptKnowsTheirStatsListsAndLocalTime() {
+        when(memoryService.profileFacts(USER)).thenReturn(List.of(
+                new MemoryService.Memory("Squat max is 120 kg", OffsetDateTime.now())));
+        when(listService.openItems(USER)).thenReturn(Map.of("shopping", List.of("milk")));
+
+        String prompt = builder.extractionPrompt(USER, ATHENS);
+
+        assertTrue(prompt.contains("- Squat max is 120 kg"), "so a lighter set isn't saved as a new max");
+        assertTrue(prompt.contains("shopping:\n  - milk"), "so list names are reused");
+        assertTrue(prompt.contains("(Europe/Athens, UTC+0"), "so reminder times get the right offset");
+    }
+
+    @Test
+    void theExtractionInputHasTheTurnAndOnlyEarlierMessagesAsContext() {
+        // Newest first, as the repository returns them: the reply and the message are already saved.
+        when(chatRepository.findTop13ByUserIdOrderByCreatedAtDesc(anyLong())).thenReturn(new ArrayList<>(List.of(
+                message(Sender.BOT, "Done, I'll remind you at 9!"),
+                message(Sender.USER, "yes please"),
+                message(Sender.BOT, "Want me to remind you to call your mom tomorrow?"),
+                message(Sender.USER, "I keep forgetting to call my mom"))));
+
+        String input = builder.extractionInput(USER, "yes please", "Done, I'll remind you at 9!");
+
+        assertTrue(input.contains("Them: I keep forgetting to call my mom\n"
+                + "You: Want me to remind you to call your mom tomorrow?"), input);
+        assertTrue(input.contains("Their NEW message:\nyes please"));
+        assertTrue(input.contains("RoboFriend's reply:\nDone, I'll remind you at 9!"));
+        assertFalse(input.contains("Them: yes please"), "the current turn isn't repeated as history");
     }
 }

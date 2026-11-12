@@ -127,10 +127,9 @@ public class CheckInService {
         List<String> profile = new ArrayList<>();
         userRepository.findById(userId).ifPresent(user -> profile.addAll(ProfileService.describe(user, today)));
         memoryService.profileFacts(userId).forEach(m -> profile.add(m.fact()));
-        // The name they chose is user-written, so it can't carry the reply marker.
-        String stats = ReplySplitter.neutralize(profile.stream()
+        String stats = profile.stream()
                 .map(line -> "- " + line)
-                .collect(Collectors.joining("\n")));
+                .collect(Collectors.joining("\n"));
         String lists = listService.openItems(userId).entrySet().stream()
                 .map(e -> e.getKey() + ": " + String.join(", ", e.getValue()))
                 .collect(Collectors.joining("\n"));

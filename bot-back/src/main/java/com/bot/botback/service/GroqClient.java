@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -63,25 +64,65 @@ public class GroqClient {
         if (!isConfigured()) {
             throw new IllegalStateException("Groq API key is not configured");
         }
-        ReplySplitter splitter = new ReplySplitter(token -> { });
-        stream(List.of(Map.of("role", "user", "content", prompt)), temperature, splitter);
-        return splitter.reply().trim();
+        StreamedReply reply = new StreamedReply(token -> { });
+        stream(List.of(Map.of("role", "user", "content", prompt)), temperature, reply);
+        return reply.text().trim();
     }
 
-    /** Streams one chat completion into {@code splitter}, retrying until text has been shown. */
-    public void stream(List<Map<String, String>> messages, double temperature, ReplySplitter splitter)
+    /** Streams one chat completion into {@code reply}, retrying until text has been shown. */
+    public void stream(List<Map<String, String>> messages, double temperature, StreamedReply reply)
             throws Exception {
+        withRetries(() -> {
+            streamGroq(messages, temperature, reply);
+            return null;
+        }, reply::emittedAny);
+    }
+
+    /**
+     * One answer that must match a JSON schema. Groq enforces the schema ("strict" mode), so the
+     * result is always valid JSON with exactly the fields asked for. Nothing is streamed.
+     *
+     * @return the JSON text of the answer
+     */
+    public String completeJson(List<Map<String, String>> messages, String schemaName, JsonNode schema)
+            throws Exception {
+        if (!isConfigured()) {
+            throw new IllegalStateException("Groq API key is not configured");
+        }
+        Map<String, Object> body = baseBody(messages, 0.2);
+        body.put("response_format", Map.of("type", "json_schema",
+                "json_schema", Map.of("name", schemaName, "strict", true, "schema", schema)));
+        return withRetries(() -> {
+            HttpResponse<String> response = httpClient.send(request(body), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new GroqHttpException(response.statusCode(), response.body());
+            }
+            JsonNode content = objectMapper.readTree(response.body())
+                    .path("choices").path(0).path("message").path("content");
+            if (!content.isTextual()) {
+                throw new IOException("Groq answer has no content");
+            }
+            return content.asText();
+        }, () -> false);
+    }
+
+    @FunctionalInterface
+    private interface GroqCall<T> {
+        T run() throws IOException, InterruptedException, GroqHttpException;
+    }
+
+    /** Retries failed calls with a growing pause, unless retrying can't help or the user saw text. */
+    private <T> T withRetries(GroqCall<T> call, BooleanSupplier userSawText) throws Exception {
         Exception lastException = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                streamGroq(messages, temperature, splitter);
-                return;
+                return call.run();
             } catch (GroqHttpException | IOException e) {
                 lastException = e;
                 int status = e instanceof GroqHttpException http ? http.status : -1;
                 log.warn("Groq attempt {}/{} failed: {}", attempt, MAX_RETRIES, e.getMessage());
                 // Once text has been shown we can't silently start over.
-                if (splitter.emittedAny() || NON_RETRYABLE_STATUSES.contains(status)) {
+                if (userSawText.getAsBoolean() || NON_RETRYABLE_STATUSES.contains(status)) {
                     throw e;
                 }
                 if (attempt < MAX_RETRIES) {
@@ -92,26 +133,33 @@ public class GroqClient {
         throw lastException != null ? lastException : new IOException("Groq call failed");
     }
 
-    private void streamGroq(List<Map<String, String>> messages, double temperature, ReplySplitter splitter)
-            throws IOException, InterruptedException, GroqHttpException {
+    private Map<String, Object> baseBody(List<Map<String, String>> messages, double temperature) {
         Map<String, Object> body = new HashMap<>();
         body.put("model", modelName);
         body.put("messages", messages);
         body.put("temperature", temperature);
         body.put("max_completion_tokens", 1024);
-        body.put("stream", true);
         if (modelName.startsWith("openai/gpt-oss")) {
             body.put("reasoning_effort", "low");
         }
+        return body;
+    }
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(GROQ_CHAT_URL))
+    private HttpRequest request(Map<String, Object> body) throws IOException {
+        return HttpRequest.newBuilder(URI.create(GROQ_CHAT_URL))
                 .timeout(Duration.ofSeconds(90))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
                 .build();
+    }
 
-        HttpResponse<Stream<String>> response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+    private void streamGroq(List<Map<String, String>> messages, double temperature, StreamedReply reply)
+            throws IOException, InterruptedException, GroqHttpException {
+        Map<String, Object> body = baseBody(messages, temperature);
+        body.put("stream", true);
+
+        HttpResponse<Stream<String>> response = httpClient.send(request(body), HttpResponse.BodyHandlers.ofLines());
         try (Stream<String> lines = response.body()) {
             if (response.statusCode() >= 400) {
                 throw new GroqHttpException(response.statusCode(), lines.collect(Collectors.joining("\n")));
@@ -128,14 +176,13 @@ public class GroqClient {
                     JsonNode content = objectMapper.readTree(data)
                             .path("choices").path(0).path("delta").path("content");
                     if (content.isTextual()) {
-                        splitter.feed(content.asText());
+                        reply.feed(content.asText());
                     }
                 } catch (IOException e) {
                     log.debug("Skipping unparseable stream chunk: {}", data);
                 }
             });
         }
-        splitter.finish();
     }
 
     private void sleepQuietly(long millis) {
